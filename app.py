@@ -16,7 +16,12 @@ authenticator = stauth.Authenticate(
     config['cookie']['key'],
     config['cookie']['expiry_days']
 )
-name, auth_status, username = authenticator.login('Login', 'sidebar')
+
+name, auth_status, username = authenticator.login(
+    location='sidebar',
+    fields={'Form name': 'Login'}
+)
+
 if not auth_status:
     st.warning("🔒 Veuillez vous authentifier")
     st.stop()
