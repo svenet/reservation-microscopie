@@ -95,5 +95,24 @@ elif choice == "Annuler une réservation":
 elif choice == "Voir les réservations":
     st.subheader("Liste des réservations")
 
+    # Requête SQL complète, puis fermeture de la chaîne
     c.execute('''
-        SELECT r.id, rm.name, r.start_date, r.end_date, r.user,
+        SELECT
+            r.id,
+            rm.name       AS salle,
+            r.start_date,
+            r.end_date,
+            r.user,
+            r.project,
+            r.status,
+            r.initial_days,
+            r.actual_days
+        FROM reservations r
+        JOIN rooms rm ON r.room_id = rm.id
+    ''')  # <<< fermeture ici
+    data = c.fetchall()
+    # Transformation en DataFrame pour affichage
+    df = pd.DataFrame(data, columns=[
+        'ID','Salle','Date début','Date fin','Utilisateur','Projet','Statut','Jours initiaux','Jours réels'
+    ])
+    st.dataframe(df)
