@@ -1,0 +1,18 @@
+credentials:
+  usernames:
+    # Administrateur avec mot de passe "WeierStrass_!1"
+    admin_user:
+      name: "Administrateur"
+      password: "$2b$12$kQJwVWcFSoNZ97vw/f681uQbMvwhhM5wthKtPsjRYnOkQgGPkGwnO"
+      role: admin
+
+    # Utilisateur sans mot de passe (hash d'une chaîne vide)
+    normal_user:
+      name: "Utilisateur"
+      password: "$2b$12$BAMPcOkBfassGfUgO7mf1eWKHzQQ2XBaozixo7zVVS9F1a2fHWwIW"
+      role: user
+
+cookie:
+  name: streamlit_auth
+  key: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+  expiry_days: 1
