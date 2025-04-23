@@ -22,19 +22,29 @@ c.execute('''
         room_id INTEGER,
         start_date TEXT,
         end_date TEXT,
-        start_time TEXT,
-        end_time TEXT,
         user TEXT,
         project TEXT,
         status TEXT,
         initial_days INTEGER,
         actual_days INTEGER,
-        created_at TEXT,
-        cancelled_at TEXT,
         FOREIGN KEY(room_id) REFERENCES rooms(id)
     )
 ''')
 conn.commit()
+
+# --- Migration automatique du schéma existant ---------------
+existing_cols = [row[1] for row in c.execute("PRAGMA table_info(reservations)").fetchall()]
+# ajouter les colonnes si elles n'existent pas encore
+if 'start_time'    not in existing_cols:
+    c.execute("ALTER TABLE reservations ADD COLUMN start_time TEXT")
+if 'end_time'      not in existing_cols:
+    c.execute("ALTER TABLE reservations ADD COLUMN end_time TEXT")
+if 'created_at'    not in existing_cols:
+    c.execute("ALTER TABLE reservations ADD COLUMN created_at TEXT")
+if 'cancelled_at'  not in existing_cols:
+    c.execute("ALTER TABLE reservations ADD COLUMN cancelled_at TEXT")
+conn.commit()
+# ------------------------------------------------------------
 
 # --- Initialisation des salles si vide ---
 c.execute("SELECT COUNT(*) FROM rooms")
@@ -52,12 +62,12 @@ choice = st.sidebar.radio("Navigation", pages)
 @st.cache_data
 def load_reservations():
     return pd.read_sql(
-        "SELECT * FROM reservations", 
-        conn, 
+        "SELECT * FROM reservations",
+        conn,
         parse_dates=['start_date', 'end_date', 'created_at', 'cancelled_at']
     )
 
-# --- Réservation ---
+# --- Page Réserver ---
 if choice == "Réserver":
     st.header("Réserver une salle")
     rooms = pd.read_sql("SELECT * FROM rooms", conn)
@@ -69,7 +79,6 @@ if choice == "Réserver":
     end_time = st.time_input("Heure de fin", time(17, 0))
 
     if st.button("Réserver"):
-        # calculs et insertion MAIS uniquement quand on clique
         rid = rooms.loc[rooms['name'] == room, 'id'].iloc[0]
         days = (end - start).days + 1
         created_at = datetime.now().isoformat()
@@ -95,7 +104,7 @@ if choice == "Réserver":
         conn.commit()
         st.success("✅ Réservation enregistrée")
 
-# --- Annuler une réservation ---
+# --- Page Annuler ---
 elif choice == "Annuler":
     st.header("Annuler une réservation")
     df = load_reservations()
@@ -125,7 +134,7 @@ elif choice == "Annuler":
     else:
         st.info("Aucune réservation active à annuler.")
 
-# --- Calendrier (vue publique simplifiée) ---
+# --- Page Calendrier (publique) ---
 elif choice == "Calendrier":
     st.header("Calendrier des disponibilités (vue publique)")
     df = load_reservations()
@@ -152,7 +161,7 @@ elif choice == "Calendrier":
             height=600
         )
 
-# --- Tableau récapitulatif ---
+# --- Page Récapitulatif ---
 elif choice == "Récapitulatif":
     st.header("📋 Récapitulatif des réservations")
     df = load_reservations()
@@ -160,7 +169,7 @@ elif choice == "Récapitulatif":
     df['Salle'] = df['room_id'].map(dict(zip(rooms['id'], rooms['name'])))
 
     df_display = df[[
-        'Salle', 'user', 'project', 'start_date', 'end_date', 
+        'Salle', 'user', 'project', 'start_date', 'end_date',
         'start_time', 'end_time', 'status', 'created_at', 'cancelled_at'
     ]]
     df_display = df_display.rename(columns={
