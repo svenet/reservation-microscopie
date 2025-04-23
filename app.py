@@ -134,5 +134,4 @@ elif choice == "Statistiques":
         rooms = pd.read_sql("SELECT id,name FROM rooms", conn)
         for rid, grp in stats.groupby('room_id'):
             name_room = rooms.loc[rooms.id==rid,'name'].iloc[0]
-::contentReference[oaicite:6]{index=6}
  
