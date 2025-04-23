@@ -1,4 +1,4 @@
-!/usr/bin/python3
+#!/usr/bin/python3
 import streamlit as st
 import sqlite3
 import pandas as pd
