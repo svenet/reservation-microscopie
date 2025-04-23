@@ -132,31 +132,31 @@ elif choice == "Calendrier":
         events_by_room[rid] = events
 
     # Options du calendrier
-options = {
-    "initialView": "timeGridWeek",
-    "firstDay": 1,  # 0 = Dimanche, 1 = Lundi
-    "slotMinTime": "08:00:00",
-    "slotMaxTime": "18:00:00",
-    "slotDuration": "04:00:00",  # Intervalles de 4 heures
-    "slotLabelInterval": "04:00:00",
-    "slotLabelFormat": {
-        "hour": "2-digit",
-        "minute": "2-digit",
-        "omitZeroMinute": False,
-        "meridiem": False,
-        "hour12": False
-    },
-    "businessHours": [
-        {"daysOfWeek": [1, 2, 3, 4, 5], "startTime": "08:00", "endTime": "12:00"},
-        {"daysOfWeek": [1, 2, 3, 4, 5], "startTime": "14:00", "endTime": "18:00"}
-    ],
-    "allDaySlot": False,
-    "headerToolbar": {
-        "left": "prev,next today",
-        "center": "title",
-        "right": "timeGridWeek"
+    options = {
+        "initialView": "timeGridWeek",
+         "firstDay": 1,  # 0 = Dimanche, 1 = Lundi
+         "slotMinTime": "08:00:00",
+        "slotMaxTime": "18:00:00",
+         "slotDuration": "04:00:00",  # Intervalles de 4 heures
+         "slotLabelInterval": "04:00:00",
+         "slotLabelFormat": {
+            "hour": "2-digit",
+            "minute": "2-digit",
+            "omitZeroMinute": False,
+            "meridiem": False,
+            "hour12": False
+        },
+        "businessHours": [
+            {"daysOfWeek": [1, 2, 3, 4, 5], "startTime": "08:00", "endTime": "12:00"},
+            {"daysOfWeek": [1, 2, 3, 4, 5], "startTime": "14:00", "endTime": "18:00"}
+        ],
+        "allDaySlot": False,
+        "headerToolbar": {
+            "left": "prev,next today",
+            "center": "title",
+            "right": "timeGridWeek"
+        }
     }
-}
 
     # Affichage des calendriers empilés
     for rid in rooms.id:
