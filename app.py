@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+!/usr/bin/env python3
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -154,6 +154,4 @@ elif choice == "Calendrier":
     for rid in rooms.id:
         st.subheader(rooms.loc[rooms.id == rid, 'name'].iloc[0])
         calendar(events=events_by_room[rid], options=options)
-
-::contentReference[oaicite:3]{index=3}
  
