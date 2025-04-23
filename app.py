@@ -67,11 +67,23 @@ if choice == "Réserver":
         rid = rooms.loc[rooms['name'] == room, 'id'].iloc[0]
         days = (end - start).days + 1
         created_at = datetime.now().isoformat()
-        c.execute('''
-            INSERT INTO reservations
-            (room_id, start_date, end_date, start_time, end_time, user, project, status, initial_days, actual_days, created_at, cancelled_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, NULL)
-        ''', (rid, start.isoformat(), end.isoformat(), start_time.isoformat(), end_time.isoformat(), user, user, days, days, created_at))
+c.execute('''
+    INSERT INTO reservations
+    (room_id, start_date, end_date, start_time, end_time, user, project, status, initial_days, actual_days, created_at, cancelled_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, NULL)
+''', (
+    rid,
+    start.isoformat(),
+    end.isoformat(),
+    start_time.strftime('%H:%M:%S'),
+    end_time.strftime('%H:%M:%S'),
+    user,
+    user,
+    days,
+    days,
+    created_at
+))
+
         conn.commit()
         st.success("✅ Réservation enregistrée")
 
