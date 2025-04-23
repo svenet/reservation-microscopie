@@ -55,7 +55,6 @@ def load_reservations():
 
 # --- Fonction de vérification des conflits de réservation ---
 def check_conflict(room_id, start_date, start_time, end_date, end_time):
-    """ Vérifie s'il y a un conflit de réservation pour une salle. """
     c.execute("""
         SELECT * FROM reservations
         WHERE room_id = ? AND status = 'active' AND (
@@ -64,7 +63,6 @@ def check_conflict(room_id, start_date, start_time, end_date, end_time):
             (start_date > ? AND end_date < ?)
         )
     """, (room_id, start_date, start_time, start_time, end_date, start_time, end_time, start_date, end_date))
-    
     return c.fetchall()
 
 # --- Menu latéral ---
@@ -81,11 +79,9 @@ if choice == "Réserver":
     stime = st.time_input("Heure de début", time(8, 0), step=3600)
     end = st.date_input("Date de fin", date.today())
     etime = st.time_input("Heure de fin", time(18, 0), step=3600)
-    
+
     if st.button("Réserver"):
         rid = rooms_df.loc[rooms_df['name'] == room, 'id'].iloc[0]
-        
-        # Vérification des conflits de réservation
         if check_conflict(rid, start.isoformat(), stime.strftime('%H:%M:%S'), end.isoformat(), etime.strftime('%H:%M:%S')):
             st.error("❌ Ce créneau est déjà réservé. Veuillez choisir un autre horaire.")
         else:
@@ -113,29 +109,35 @@ elif choice == "Annuler":
     if active.empty:
         st.info("Aucune réservation active.")
     else:
-        # Affichage des réservations actives
         options = active.apply(lambda r: f"{r.id} – {r.user} ({r.start_date.date()} → {r.end_date.date()})", axis=1)
         selection = st.selectbox("Sélectionner une réservation", options)
-        
+
         if selection:
-            rid = int(selection.split(" –")[0])  # Extraire l'ID de la réservation sélectionnée
-            actual_end_date = st.date_input("Date réelle d'arrêt", date.today())
+            rid = int(selection.split(" –")[0])
+            rinfo = active[active.id == rid].iloc[0]
+            actual_end_date = st.date_input("Date réelle d'arrêt", date.today(), min_value=rinfo.start_date.date(), max_value=rinfo.end_date.date())
 
-            if st.button("Annuler la réservation"):
-                # Calcul du nombre de jours réellement utilisés
-                sd = datetime.fromisoformat(c.execute("SELECT start_date FROM reservations WHERE id = ?", (rid,)).fetchone()[0]).date()
-                actual_days = (actual_end_date - sd).days + 1
+            full_cancel = st.checkbox("Annuler la totalité de la réservation")
 
-                # Marquer la réservation comme annulée et enregistrer la date d'annulation
-                canc = datetime.now().isoformat()
-                c.execute("""
-                    UPDATE reservations
-                    SET status = 'cancelled', actual_days = ?, cancelled_at = ?
-                    WHERE id = ?
-                """, (actual_days, canc, rid))
+            if st.button("Annuler"):
+                if full_cancel or actual_end_date == rinfo.start_date.date():
+                    canc = datetime.now().isoformat()
+                    c.execute("""
+                        UPDATE reservations
+                        SET status = 'cancelled', actual_days = 0, cancelled_at = ?
+                        WHERE id = ?
+                    """, (canc, rid))
+                else:
+                    # Mise à jour pour la partie maintenue
+                    actual_days = (actual_end_date - rinfo.start_date.date()).days + 1
+                    c.execute("""
+                        UPDATE reservations
+                        SET end_date = ?, actual_days = ?, cancelled_at = ?, status = 'cancelled'
+                        WHERE id = ?
+                    """, (actual_end_date.isoformat(), actual_days, datetime.now().isoformat(), rid))
+
                 conn.commit()
-
-                st.warning("⚠️ Réservation annulée avec succès.")
+                st.success("⚠️ Réservation mise à jour.")
 
 # --- Page du calendrier ---
 elif choice == "Calendrier":
@@ -144,7 +146,6 @@ elif choice == "Calendrier":
     df = load_reservations()
     df = df[df.status == 'active']
 
-    # Préparation des événements pour chaque salle
     events_by_room = {}
     rooms = pd.read_sql("SELECT id, name FROM rooms", conn)
     for rid, name in zip(rooms.id, rooms.name):
@@ -157,14 +158,13 @@ elif choice == "Calendrier":
             })
         events_by_room[rid] = events
 
-    # Options du calendrier
     options = {
         "initialView": "timeGridWeek",
-        "locale": "fr",  # Affichage en français
-        "firstDay": 1,   # La semaine commence le lundi
+        "locale": "fr",
+        "firstDay": 1,
         "slotMinTime": "08:00:00",
         "slotMaxTime": "18:00:00",
-        "slotDuration": "05:00:00",  # Deux créneaux de 5 heures
+        "slotDuration": "05:00:00",
         "slotLabelInterval": "05:00:00",
         "slotLabelFormat": {
             "hour": "2-digit",
@@ -185,17 +185,6 @@ elif choice == "Calendrier":
         }
     }
 
-    custom_css = """
-    .fc-event {
-        background-color: red !important;
-        border: none !important;
-    }
-    .fc-timegrid-slot {
-        background-color: black;
-    }
-    """
-
-    # Affichage des calendriers empilés
     for rid in rooms.id:
         st.subheader(rooms.loc[rooms.id == rid, 'name'].iloc[0])
         calendar(events=events_by_room[rid], options=options)
