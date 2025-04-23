@@ -134,12 +134,13 @@ elif choice == "Calendrier":
     # Options du calendrier
     options = {
         "initialView": "timeGridWeek",
-         "firstDay": 1,  # 0 = Dimanche, 1 = Lundi
-         "slotMinTime": "08:00:00",
+        "locale": "fr",  # Affichage en français
+        "firstDay": 1,   # La semaine commence le lundi
+        "slotMinTime": "08:00:00",
         "slotMaxTime": "18:00:00",
-         "slotDuration": "04:00:00",  # Intervalles de 4 heures
-         "slotLabelInterval": "04:00:00",
-         "slotLabelFormat": {
+        "slotDuration": "05:00:00",  # Deux créneaux de 5 heures
+        "slotLabelInterval": "05:00:00",
+        "slotLabelFormat": {
             "hour": "2-digit",
             "minute": "2-digit",
             "omitZeroMinute": False,
@@ -147,8 +148,8 @@ elif choice == "Calendrier":
             "hour12": False
         },
         "businessHours": [
-            {"daysOfWeek": [1, 2, 3, 4, 5], "startTime": "08:00", "endTime": "12:00"},
-            {"daysOfWeek": [1, 2, 3, 4, 5], "startTime": "14:00", "endTime": "18:00"}
+            {"daysOfWeek": [1, 2, 3, 4, 5, 6, 7], "startTime": "08:00", "endTime": "13:00"},
+            {"daysOfWeek": [1, 2, 3, 4, 5, 6, 7], "startTime": "13:00", "endTime": "18:00"}
         ],
         "allDaySlot": False,
         "headerToolbar": {
@@ -157,6 +158,7 @@ elif choice == "Calendrier":
             "right": "timeGridWeek"
         }
     }
+
 
     # Affichage des calendriers empilés
     for rid in rooms.id:
