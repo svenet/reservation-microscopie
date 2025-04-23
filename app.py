@@ -34,14 +34,13 @@ conn.commit()
 
 # --- Migration automatique du schéma existant ---------------
 existing_cols = [row[1] for row in c.execute("PRAGMA table_info(reservations)").fetchall()]
-# ajouter les colonnes si elles n'existent pas encore
-if 'start_time'    not in existing_cols:
+if 'start_time'   not in existing_cols:
     c.execute("ALTER TABLE reservations ADD COLUMN start_time TEXT")
-if 'end_time'      not in existing_cols:
+if 'end_time'     not in existing_cols:
     c.execute("ALTER TABLE reservations ADD COLUMN end_time TEXT")
-if 'created_at'    not in existing_cols:
+if 'created_at'   not in existing_cols:
     c.execute("ALTER TABLE reservations ADD COLUMN created_at TEXT")
-if 'cancelled_at'  not in existing_cols:
+if 'cancelled_at' not in existing_cols:
     c.execute("ALTER TABLE reservations ADD COLUMN cancelled_at TEXT")
 conn.commit()
 # ------------------------------------------------------------
@@ -70,8 +69,8 @@ def load_reservations():
 # --- Page Réserver ---
 if choice == "Réserver":
     st.header("Réserver une salle")
-    rooms = pd.read_sql("SELECT * FROM rooms", conn)
-    room = st.selectbox("Salle", rooms['name'])
+    rooms_df = pd.read_sql("SELECT * FROM rooms", conn)
+    room = st.selectbox("Salle", rooms_df['name'])
     user = st.text_input("Nom utilisateur / projet")
     start = st.date_input("Date de début", date.today())
     end = st.date_input("Date de fin", date.today())
@@ -79,7 +78,7 @@ if choice == "Réserver":
     end_time = st.time_input("Heure de fin", time(17, 0))
 
     if st.button("Réserver"):
-        rid = rooms.loc[rooms['name'] == room, 'id'].iloc[0]
+        rid = rooms_df.loc[rooms_df['name'] == room, 'id'].iloc[0]
         days = (end - start).days + 1
         created_at = datetime.now().isoformat()
 
@@ -134,25 +133,31 @@ elif choice == "Annuler":
     else:
         st.info("Aucune réservation active à annuler.")
 
-# --- Page Calendrier (publique) ---
+# --- Page Calendrier (vue publique corrigée) ---
 elif choice == "Calendrier":
     st.header("Calendrier des disponibilités (vue publique)")
     df = load_reservations()
-    df = df[df['status'] == 'active']
+    df_active = df[df['status'] == 'active']
 
-    if df.empty:
+    if df_active.empty:
         st.success("✅ Toutes les salles sont disponibles !")
     else:
         st.write("🟩 Libre / 🟥 Réservé")
         days_range = pd.date_range(start=date.today(), periods=30)
-        room_names = pd.read_sql("SELECT name FROM rooms", conn)['name'].tolist()
-        calendar_df = pd.DataFrame(index=days_range, columns=room_names)
+        rooms_list = pd.read_sql("SELECT * FROM rooms", conn)
+        id2name = dict(zip(rooms_list['id'], rooms_list['name']))
+        calendar_df = pd.DataFrame(
+            index=days_range,
+            columns=rooms_list['name']
+        )
         calendar_df[:] = "🟩"
 
-        rooms = pd.read_sql("SELECT * FROM rooms", conn)
-        for _, row in df.iterrows():
-            room_name = rooms.loc[rooms.id == row.room_id, 'name'].iloc[0]
-            for d in pd.date_range(start=row.start_date, end=row.end_date):
+        # Remplissage sécurisé via mapping
+        for _, row in df_active.iterrows():
+            room_name = id2name.get(row['room_id'])
+            if not room_name:
+                continue
+            for d in pd.date_range(start=row['start_date'], end=row['end_date']):
                 if d in calendar_df.index:
                     calendar_df.at[d, room_name] = "🟥"
 
@@ -165,8 +170,8 @@ elif choice == "Calendrier":
 elif choice == "Récapitulatif":
     st.header("📋 Récapitulatif des réservations")
     df = load_reservations()
-    rooms = pd.read_sql("SELECT * FROM rooms", conn)
-    df['Salle'] = df['room_id'].map(dict(zip(rooms['id'], rooms['name'])))
+    rooms_df = pd.read_sql("SELECT * FROM rooms", conn)
+    df['Salle'] = df['room_id'].map(dict(zip(rooms_df['id'], rooms_df['name'])))
 
     df_display = df[[
         'Salle', 'user', 'project', 'start_date', 'end_date',
