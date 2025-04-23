@@ -6,65 +6,43 @@ from datetime import datetime, date, time
 from st_aggrid import AgGrid
 from streamlit_calendar import calendar
 
-# --- Connexion et création/migration du schéma SQLite ---
+# ---  SQLITE : connexion + schéma + migration automatique ---
 conn = sqlite3.connect('reservations.db', check_same_thread=False)
 c = conn.cursor()
-
-# Tables de base
-c.execute("""
-  CREATE TABLE IF NOT EXISTS rooms (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE
-  )
-""")
-c.execute("""
-  CREATE TABLE IF NOT EXISTS reservations (
-    id INTEGER PRIMARY KEY,
-    room_id INTEGER,
-    start_date TEXT,
-    end_date TEXT,
-    user TEXT,
-    project TEXT,
-    status TEXT,
-    initial_days INTEGER,
-    actual_days INTEGER,
-    FOREIGN KEY(room_id) REFERENCES rooms(id)
-  )
-""")
+c.execute("""CREATE TABLE IF NOT EXISTS rooms (
+                id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE)""")
+c.execute("""CREATE TABLE IF NOT EXISTS reservations (
+                id INTEGER PRIMARY KEY,
+                room_id INTEGER, start_date TEXT, end_date TEXT,
+                user TEXT, project TEXT, status TEXT,
+                initial_days INTEGER, actual_days INTEGER,
+                FOREIGN KEY(room_id) REFERENCES rooms(id)
+            )""")
 conn.commit()
-
-# Migration automatique pour les colonnes d’horaires et timestamps
-existing = [col[1] for col in c.execute("PRAGMA table_info(reservations)").fetchall()]
-for col, typ in [
-  ('start_time','TEXT'), ('end_time','TEXT'),
-  ('created_at','TEXT'), ('cancelled_at','TEXT')
-]:
+# migration pour colonnes horaires et timestamps
+existing = [col[1] for col in c.execute("PRAGMA table_info(reservations)") ]
+for col in ['start_time','end_time','created_at','cancelled_at']:
     if col not in existing:
-        c.execute(f"ALTER TABLE reservations ADD COLUMN {col} {typ}")
+        c.execute(f"ALTER TABLE reservations ADD COLUMN {col} TEXT")
 conn.commit()
-
-# Initialisation des salles si nécessaire
+# init salles si vide
 c.execute("SELECT COUNT(*) FROM rooms")
-if c.fetchone()[0] == 0:
-    c.executemany("INSERT INTO rooms (name) VALUES (?)", [
-      ("Salle Raman - Witec",),
-      ("Salle microscope inversé - Nikon",)
-    ])
+if c.fetchone()[0]==0:
+    c.executemany("INSERT INTO rooms(name) VALUES(?)",
+                  [("Salle Raman - Witec",),("Salle microscope inversé - Nikon",)])
     conn.commit()
 
-# Chargement des réservations
+# --- Chargement des réservations ---
 @st.cache_data
 def load_reservations():
-    return pd.read_sql(
-        "SELECT * FROM reservations", conn,
-        parse_dates=['start_date','end_date','created_at','cancelled_at']
-    )
+    return pd.read_sql("SELECT * FROM reservations", conn,
+                       parse_dates=['start_date','end_date','created_at','cancelled_at'])
 
-# Menu
+# --- Menu ---
 st.sidebar.title("Menu")
 choice = st.sidebar.radio("Navigation", ["Réserver","Annuler","Calendrier","Récapitulatif"])
 
-# --- Page Réserver ---
+# --- Pages Réserver / Annuler (identique à avant) ---
 if choice=="Réserver":
     st.header("Réserver une salle")
     rooms_df = pd.read_sql("SELECT * FROM rooms", conn)
@@ -78,20 +56,17 @@ if choice=="Réserver":
         rid = rooms_df.loc[rooms_df['name']==room,'id'].iloc[0]
         days = (end-start).days+1
         now = datetime.now().isoformat()
-        c.execute("""
-          INSERT INTO reservations
-            (room_id,start_date,end_date,start_time,end_time,
-             user,project,status,initial_days,actual_days,created_at,cancelled_at)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL)
-        """, (
-          rid, start.isoformat(), end.isoformat(),
-          stime.strftime('%H:%M:%S'), etime.strftime('%H:%M:%S'),
-          user, user, 'active', days, days, now
-        ))
+        c.execute("""INSERT INTO reservations
+                     (room_id,start_date,end_date,start_time,end_time,
+                      user,project,status,initial_days,actual_days,
+                      created_at,cancelled_at)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL)""",
+                  (rid, start.isoformat(), end.isoformat(),
+                   stime.strftime('%H:%M:%S'), etime.strftime('%H:%M:%S'),
+                   user, user, 'active', days, days, now))
         conn.commit()
         st.success("✅ Réservation enregistrée")
 
-# --- Page Annuler ---
 elif choice=="Annuler":
     st.header("Annuler une réservation")
     df = load_reservations()
@@ -104,59 +79,67 @@ elif choice=="Annuler":
         if sel and st.button("Annuler"):
             rid = int(sel.split(" –")[0])
             used = st.date_input("Date réelle d'arrêt", date.today())
-            sd = datetime.fromisoformat(c.execute(
-                "SELECT start_date FROM reservations WHERE id=?", (rid,)
-            ).fetchone()[0]).date()
+            sd = datetime.fromisoformat(
+                c.execute("SELECT start_date FROM reservations WHERE id=?", (rid,)).fetchone()[0]
+            ).date()
             actual = (used-sd).days+1
             canc = datetime.now().isoformat()
-            c.execute("""
-              UPDATE reservations
-              SET status='cancelled', actual_days=?, cancelled_at=?
-              WHERE id=?
-            """, (actual,canc,rid))
+            c.execute("""UPDATE reservations
+                         SET status='cancelled', actual_days=?, cancelled_at=?
+                         WHERE id=?""", (actual,canc,rid))
             conn.commit()
             st.warning("⚠️ Réservation annulée")
 
-# --- Page Calendrier (2 demi-journées) ---
+# --- Page CALENDRIER : vue hebdo ½-journées ---
 elif choice=="Calendrier":
-    st.header("Disponibilités par demi-journée")
+    st.header("Disponibilités – vue semaine (08h-12h & 14h-18h)")
+
     df = load_reservations()
     df = df[df.status=='active']
 
-    # Prépare la liste d'événements pour FullCalendar
+    # Prépare les events FullCalendar
     events_by_room = {}
-    for rid in pd.read_sql("SELECT id,name FROM rooms",conn).itertuples():
-        events = []
-        for _, r in df[df.room_id==rid.id].iterrows():
-            events.append({
-              "title":"Occupé",
-              "start": f"{r.start_date.date().isoformat()}T{r.start_time}",
-              "end":   f"{r.end_date.date().isoformat()}T{r.end_time}"
+    rooms = pd.read_sql("SELECT id,name FROM rooms", conn)
+    for rid,name in zip(rooms.id, rooms.name):
+        evs = []
+        for _, r in df[df.room_id==rid].iterrows():
+            evs.append({
+                "title":"Occupé",
+                "start": f"{r.start_date.date().isoformat()}T{r.start_time}",
+                "end":   f"{r.end_date.date().isoformat()}T{r.end_time}"
             })
-        events_by_room[rid.id] = events
+        events_by_room[rid] = evs
 
-    # Options FullCalendar pour 12h slots en timeGridDay
+    # Options FullCalendar – vue hebdo, créneaux 4h, businessHours en 8-12 & 14-18
     options = {
-      "initialView":"timeGridDay",
-      "slotMinTime":"08:00:00","slotMaxTime":"20:00:00",
-      "slotDuration":"12:00:00","slotLabelInterval":"12:00:00",
-      "headerToolbar":{"left":"prev,next today","center":"title","right":""}
+      "initialView":    "timeGridWeek",          # vue semaine :contentReference[oaicite:1]{index=1}
+      "slotMinTime":    "08:00:00",              # début plage :contentReference[oaicite:2]{index=2}
+      "slotMaxTime":    "18:00:00",              # fin plage :contentReference[oaicite:3]{index=3}
+      "slotDuration":   "04:00:00",              # créneaux de 4h :contentReference[oaicite:4]{index=4}
+      "slotLabelInterval":"04:00:00",            # label chaque 4h :contentReference[oaicite:5]{index=5}
+      "businessHours":[                          # met en évidence ½-journées :contentReference[oaicite:6]{index=6}
+         {"daysOfWeek":[1,2,3,4,5],"startTime":"08:00","endTime":"12:00"},
+         {"daysOfWeek":[1,2,3,4,5],"startTime":"14:00","endTime":"18:00"}
+      ],
+      "allDaySlot": False,
+      "headerToolbar":{"left":"prev,next today","center":"title","right":"timeGridWeek"}
     }
 
-    col1, col2 = st.columns(2)  # deux colonnes :contentReference[oaicite:4]{index=4}
+    # Deux colonnes – une par salle :contentReference[oaicite:7]{index=7}
+    col1, col2 = st.columns(2)
     with col1:
-        st.subheader("Salle Raman - Witec")
+        st.subheader(rooms.loc[rooms.id==1,'name'].iloc[0])
         calendar(events=events_by_room[1], options=options)
     with col2:
-        st.subheader("Microscope inversé - Nikon")
+        st.subheader(rooms.loc[rooms.id==2,'name'].iloc[0])
         calendar(events=events_by_room[2], options=options)
 
-# --- Page Récapitulatif ---
+# --- Page RÉCAPITULATIF (identique) ---
 elif choice=="Récapitulatif":
-    st.header("📋 Récapitulatif")
+    st.header("📋 Récapitulatif des réservations")
     df = load_reservations()
-    rooms = dict(zip(*pd.read_sql("SELECT id,name FROM rooms",conn).values.T))
-    df['Salle'] = df.room_id.map(rooms)
+    mapping = dict(zip(*pd.read_sql("SELECT id,name FROM rooms",conn).values.T))
+    df['Salle'] = df.room_id.map(mapping)
     df = df.rename(columns={
       'user':'Utilisateur','project':'Projet',
       'start_date':'Début','end_date':'Fin',
