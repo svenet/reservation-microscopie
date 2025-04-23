@@ -1,9 +1,10 @@
 #!/usr/bin/python3
 import streamlit as st
 import sqlite3
+from st_aggrid import AgGrid
 import pandas as pd
 from datetime import datetime, date
-from streamlit_calendar import calendar
+
 
 # --- Connexion à la base de données ---
 conn = sqlite3.connect('reservations.db', check_same_thread=False)
