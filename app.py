@@ -137,7 +137,7 @@ elif choice == "Calendrier":
         "locale": "fr",  # Affichage en français
         "firstDay": 1,   # La semaine commence le lundi
         "slotMinTime": "08:00:00",
-        "slotMaxTime": "18:00:00",
+        "slotMaxTime": "13:00:00",
         "slotDuration": "05:00:00",  # Deux créneaux de 5 heures
         "slotLabelInterval": "05:00:00",
         "slotLabelFormat": {
