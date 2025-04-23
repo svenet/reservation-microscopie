@@ -2,16 +2,10 @@ credentials:
   usernames:
     admin_user:
       name: "Administrateur"
-      password: "$2b$12$kQJwVWcFSoNZ97vw/f681uQbMvwhhM5wthKtPsjRYnOkQgGPkGwnO"
+      password: "<mot_de_passe_haché>"
       role: admin
-
-    normal_user:
-      name: "Utilisateur"
-      # mot de passe en clair : User_123!
-      password: "$2b$12$eW7K4u0rBq/1DsYIVRMfVuDVwZsZToxF2/pz8nQCp4LK6V7Ytp6pC"
-      role: user
 
 cookie:
   name: streamlit_auth
-  key: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+  key: random_signature_key
   expiry_days: 1
