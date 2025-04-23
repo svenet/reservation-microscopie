@@ -159,7 +159,7 @@ elif choice == "Calendrier":
         }
     }
 
-        custom_css = """
+    custom_css = """
     .fc-event {
         background-color: red !important;
         border: none !important;
