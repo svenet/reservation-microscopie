@@ -53,6 +53,20 @@ def load_reservations():
     return pd.read_sql("SELECT * FROM reservations", conn,
                        parse_dates=['start_date', 'end_date', 'created_at', 'cancelled_at'])
 
+# --- Fonction de vérification des conflits de réservation ---
+def check_conflict(room_id, start_date, start_time, end_date, end_time):
+    """ Vérifie s'il y a un conflit de réservation pour une salle. """
+    c.execute("""
+        SELECT * FROM reservations
+        WHERE room_id = ? AND status = 'active' AND (
+            (start_date = ? AND start_time < ? AND end_time > ?) OR
+            (end_date = ? AND start_time < ? AND end_time > ?) OR
+            (start_date > ? AND end_date < ?)
+        )
+    """, (room_id, start_date, start_time, start_time, end_date, start_time, end_time, start_date, end_date))
+    
+    return c.fetchall()
+
 # --- Menu latéral ---
 st.sidebar.title("Menu")
 choice = st.sidebar.radio("Navigation", ["Réserver", "Annuler", "Calendrier", "Récapitulatif"])
@@ -67,23 +81,29 @@ if choice == "Réserver":
     end = st.date_input("Date de fin", date.today())
     stime = st.time_input("Heure de début", time(8, 0))
     etime = st.time_input("Heure de fin", time(12, 0))
+    
     if st.button("Réserver"):
         rid = rooms_df.loc[rooms_df['name'] == room, 'id'].iloc[0]
-        days = (end - start).days + 1
-        now = datetime.now().isoformat()
-        c.execute("""
-            INSERT INTO reservations (
-                room_id, start_date, end_date, start_time, end_time,
-                user, project, status, initial_days, actual_days,
-                created_at, cancelled_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-        """, (
-            rid, start.isoformat(), end.isoformat(),
-            stime.strftime('%H:%M:%S'), etime.strftime('%H:%M:%S'),
-            user, user, 'active', days, days, now
-        ))
-        conn.commit()
-        st.success("✅ Réservation enregistrée")
+        
+        # Vérification des conflits de réservation
+        if check_conflict(rid, start.isoformat(), stime.strftime('%H:%M:%S'), end.isoformat(), etime.strftime('%H:%M:%S')):
+            st.error("❌ Ce créneau est déjà réservé. Veuillez choisir un autre horaire.")
+        else:
+            days = (end - start).days + 1
+            now = datetime.now().isoformat()
+            c.execute("""
+                INSERT INTO reservations (
+                    room_id, start_date, end_date, start_time, end_time,
+                    user, project, status, initial_days, actual_days,
+                    created_at, cancelled_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+            """, (
+                rid, start.isoformat(), end.isoformat(),
+                stime.strftime('%H:%M:%S'), etime.strftime('%H:%M:%S'),
+                user, user, 'active', days, days, now
+            ))
+            conn.commit()
+            st.success("✅ Réservation enregistrée")
 
 # --- Page d'annulation ---
 elif choice == "Annuler":
@@ -169,12 +189,10 @@ elif choice == "Calendrier":
     }
     """
 
-
     # Affichage des calendriers empilés
     for rid in rooms.id:
         st.subheader(rooms.loc[rooms.id == rid, 'name'].iloc[0])
         calendar(events=events_by_room[rid], options=options)
-
 
 # --- Page Récapitulatif ---
 elif choice == "Récapitulatif":
@@ -204,5 +222,3 @@ elif choice == "Récapitulatif":
         height=500,
         fit_columns_on_grid_load=True
     )
-
- 
