@@ -1,16 +1,13 @@
 #!/usr/bin/python3
 import streamlit as st
-import sqlite3
-import pandas as pd
-import yaml
 import streamlit_authenticator as stauth
-from datetime import datetime, date
-from streamlit_calendar import calendar  # FullCalendar component
+import yaml
+from yaml.loader import SafeLoader
 
-# --- 1. Authentification et rôles ---
+# ---1 Authentification et rôles ---
 with open('config.yaml') as f:
     config = yaml.safe_load(f)
-    
+
 authenticator = stauth.Authenticate(
     config['credentials'],
     config['cookie']['name'],
@@ -18,16 +15,29 @@ authenticator = stauth.Authenticate(
     config['cookie']['expiry_days']
 )
 
-name, auth_status, username = authenticator.login(
-    'sidebar',  
-    'Login'       
-)
+# 1) Affiche le formulaire dans la sidebar (retourne None)
+authenticator.login(location='sidebar', key='Login')
 
+# 2) Récupère le résultat (name, status, username) en mode unrendered
+result = authenticator.login(location='unrendered', key='Login')
 
-if not auth_status:
+# Si pas encore soumis, result est None → on stoppe
+if result is None:
     st.warning("🔒 Veuillez vous authentifier")
     st.stop()
+
+# Maintenant on peut dépaqueter
+name, auth_status, username = result
+
+# Vérifier le statut
+if not auth_status:
+    st.error("❌ Nom d’utilisateur ou mot de passe invalide")
+    st.stop()
+
+# Rôle de l’utilisateur
 user_role = config['credentials']['usernames'][username].get('role', 'user')
+
+
 
 # --- 2. Initialisation de la base SQLite ---
 conn = sqlite3.connect('reservations.db', check_same_thread=False)
