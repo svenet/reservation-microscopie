@@ -174,4 +174,35 @@ elif choice == "Calendrier":
     for rid in rooms.id:
         st.subheader(rooms.loc[rooms.id == rid, 'name'].iloc[0])
         calendar(events=events_by_room[rid], options=options)
+
+
+# --- Page Récapitulatif ---
+elif choice == "Récapitulatif":
+    st.header("📋 Récapitulatif des réservations")
+    df = load_reservations()
+    rooms_df = pd.read_sql("SELECT * FROM rooms", conn)
+    df['Salle'] = df['room_id'].map(dict(zip(rooms_df['id'], rooms_df['name'])))
+
+    df_display = df[[
+        'Salle', 'user', 'project', 'start_date', 'end_date',
+        'start_time', 'end_time', 'status', 'created_at', 'cancelled_at'
+    ]]
+    df_display = df_display.rename(columns={
+        'user': 'Utilisateur',
+        'project': 'Projet',
+        'start_date': 'Début',
+        'end_date': 'Fin',
+        'start_time': 'Heure début',
+        'end_time': 'Heure fin',
+        'status': 'Statut',
+        'created_at': 'Réservé le',
+        'cancelled_at': 'Annulé le'
+    })
+
+    AgGrid(
+        df_display.sort_values(by='Début', ascending=False),
+        height=500,
+        fit_columns_on_grid_load=True
+    )
+
  
