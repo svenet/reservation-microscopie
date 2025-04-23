@@ -42,7 +42,7 @@ conn.commit()
 c.execute("SELECT COUNT(*) FROM rooms")
 if c.fetchone()[0] == 0:
     c.executemany("INSERT INTO rooms (name) VALUES (?)", [
-        ("Salle Raman - Wc",),
+        ("Salle Raman - Witec",),
         ("Salle microscope inversé - Nikon",)
     ])
     conn.commit()
@@ -78,8 +78,8 @@ if choice == "Réserver":
     room = st.selectbox("Salle", rooms_df['name'])
     user = st.text_input("Nom de l'utilisateur / Projet")
     start = st.date_input("Date de début", date.today())
-    end = st.date_input("Date de fin", date.today())
     stime = st.time_input("Heure de début", time(8, 0))
+    end = st.date_input("Date de fin", date.today())
     etime = st.time_input("Heure de fin", time(12, 0))
     
     if st.button("Réserver"):
