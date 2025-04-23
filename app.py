@@ -80,7 +80,7 @@ if choice == "Réserver":
     start = st.date_input("Date de début", date.today())
     stime = st.time_input("Heure de début", time(8, 0), step=3600)
     end = st.date_input("Date de fin", date.today())
-    etime = st.time_input("Heure de fin", time(12, 0), step=3600)
+    etime = st.time_input("Heure de fin", time(18, 0), step=3600)
     
     if st.button("Réserver"):
         rid = rooms_df.loc[rooms_df['name'] == room, 'id'].iloc[0]
