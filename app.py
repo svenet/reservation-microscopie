@@ -113,23 +113,29 @@ elif choice == "Annuler":
     if active.empty:
         st.info("Aucune réservation active.")
     else:
+        # Affichage des réservations actives
         options = active.apply(lambda r: f"{r.id} – {r.user} ({r.start_date.date()} → {r.end_date.date()})", axis=1)
         selection = st.selectbox("Sélectionner une réservation", options)
-        if selection and st.button("Annuler"):
-            rid = int(selection.split(" –")[0])
-            used = st.date_input("Date réelle d'arrêt", date.today())
-            sd = datetime.fromisoformat(
-                c.execute("SELECT start_date FROM reservations WHERE id = ?", (rid,)).fetchone()[0]
-            ).date()
-            actual = (used - sd).days + 1
-            canc = datetime.now().isoformat()
-            c.execute("""
-                UPDATE reservations
-                SET status = 'cancelled', actual_days = ?, cancelled_at = ?
-                WHERE id = ?
-            """, (actual, canc, rid))
-            conn.commit()
-            st.warning("⚠️ Réservation annulée")
+        
+        if selection:
+            rid = int(selection.split(" –")[0])  # Extraire l'ID de la réservation sélectionnée
+            actual_end_date = st.date_input("Date réelle d'arrêt", date.today())
+
+            if st.button("Annuler la réservation"):
+                # Calcul du nombre de jours réellement utilisés
+                sd = datetime.fromisoformat(c.execute("SELECT start_date FROM reservations WHERE id = ?", (rid,)).fetchone()[0]).date()
+                actual_days = (actual_end_date - sd).days + 1
+
+                # Marquer la réservation comme annulée et enregistrer la date d'annulation
+                canc = datetime.now().isoformat()
+                c.execute("""
+                    UPDATE reservations
+                    SET status = 'cancelled', actual_days = ?, cancelled_at = ?
+                    WHERE id = ?
+                """, (actual_days, canc, rid))
+                conn.commit()
+
+                st.warning("⚠️ Réservation annulée avec succès.")
 
 # --- Page du calendrier ---
 elif choice == "Calendrier":
