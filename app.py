@@ -3,8 +3,7 @@ import streamlit as st
 import sqlite3
 from st_aggrid import AgGrid
 import pandas as pd
-from datetime import datetime, date
-
+from datetime import datetime, date, time
 
 # --- Connexion à la base de données ---
 conn = sqlite3.connect('reservations.db', check_same_thread=False)
@@ -23,11 +22,15 @@ c.execute('''
         room_id INTEGER,
         start_date TEXT,
         end_date TEXT,
+        start_time TEXT,
+        end_time TEXT,
         user TEXT,
         project TEXT,
         status TEXT,
         initial_days INTEGER,
         actual_days INTEGER,
+        created_at TEXT,
+        cancelled_at TEXT,
         FOREIGN KEY(room_id) REFERENCES rooms(id)
     )
 ''')
@@ -39,17 +42,17 @@ if c.fetchone()[0] == 0:
     c.execute("INSERT INTO rooms (name) VALUES (?)", ("Salle microscope inversé - Nikon",))
 conn.commit()
 
-# --- Menu de navigation ---
+# --- Navigation ---
 st.sidebar.title("Menu")
-pages = ["Réserver", "Annuler", "Calendrier", "Statistiques (admin)"]
+pages = ["Réserver", "Annuler", "Calendrier", "Récapitulatif"]
 choice = st.sidebar.radio("Navigation", pages)
 
-# --- Fonction utilitaire : chargement des réservations ---
+# --- Chargement des réservations ---
 @st.cache_data
 def load_reservations():
-    return pd.read_sql("SELECT * FROM reservations", conn, parse_dates=['start_date', 'end_date'])
+    return pd.read_sql("SELECT * FROM reservations", conn, parse_dates=['start_date', 'end_date', 'created_at', 'cancelled_at'])
 
-# --- Page Réserver ---
+# --- Réservation ---
 if choice == "Réserver":
     st.header("Réserver une salle")
     rooms = pd.read_sql("SELECT * FROM rooms", conn)
@@ -57,19 +60,22 @@ if choice == "Réserver":
     user = st.text_input("Nom utilisateur / projet")
     start = st.date_input("Date de début", date.today())
     end = st.date_input("Date de fin", date.today())
+    start_time = st.time_input("Heure de début", time(9, 0))
+    end_time = st.time_input("Heure de fin", time(17, 0))
 
     if st.button("Réserver"):
         rid = rooms.loc[rooms['name'] == room, 'id'].iloc[0]
         days = (end - start).days + 1
+        created_at = datetime.now().isoformat()
         c.execute('''
             INSERT INTO reservations
-            (room_id, start_date, end_date, user, project, status, initial_days, actual_days)
-            VALUES (?, ?, ?, ?, ?, 'active', ?, ?)
-        ''', (rid, start.isoformat(), end.isoformat(), user, user, days, days))
+            (room_id, start_date, end_date, start_time, end_time, user, project, status, initial_days, actual_days, created_at, cancelled_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, NULL)
+        ''', (rid, start.isoformat(), end.isoformat(), start_time.isoformat(), end_time.isoformat(), user, user, days, days, created_at))
         conn.commit()
         st.success("✅ Réservation enregistrée")
 
-# --- Page Annuler ---
+# --- Annuler une réservation ---
 elif choice == "Annuler":
     st.header("Annuler une réservation")
     df = load_reservations()
@@ -83,54 +89,57 @@ elif choice == "Annuler":
             start_str = c.execute("SELECT start_date FROM reservations WHERE id=?", (res_id,)).fetchone()[0]
             start_dt = datetime.fromisoformat(start_str).date()
             actual = (used - start_dt).days + 1
-            c.execute("UPDATE reservations SET status='cancelled', actual_days=? WHERE id=?", (actual, res_id))
+            cancelled_at = datetime.now().isoformat()
+            c.execute("UPDATE reservations SET status='cancelled', actual_days=?, cancelled_at=? WHERE id=?",
+                      (actual, cancelled_at, res_id))
             conn.commit()
             st.warning("⚠️ Réservation annulée")
     else:
         st.info("Aucune réservation active à annuler.")
 
-# --- Page Calendrier ---
+# --- Calendrier (vue publique simplifiée) ---
 elif choice == "Calendrier":
-    st.header("Calendrier des réservations")
-    df = load_reservations()
-    rooms = pd.read_sql("SELECT * FROM rooms", conn)
-    events = []
-
-    for _, r in df.iterrows():
-        room_name = rooms[rooms.id == r.room_id].name.values[0]
-        events.append({
-            'title': f"{r.project} ({room_name})",
-            'start': r.start_date.date().isoformat(),
-            'end': (r.end_date + pd.Timedelta(days=1)).date().isoformat(),
-            'color': '#28a745' if r.status == 'active' else '#6c757d'
-        })
-
-    calendar(events=events, height=600)
-
-# --- Page Statistiques admin ---
-elif choice == "Statistiques (admin)":
-    st.header("Statistiques d’occupation (admin)")
-
-    # Authentification simple
-    pwd = st.text_input("Mot de passe admin", type="password")
-    if pwd != "WeierStrass_!1":
-        st.error("🔒 Accès refusé")
-        st.stop()
+    st.header("Calendrier des disponibilités (vue publique)")
 
     df = load_reservations()
-    stats = df.groupby(['room_id', 'status']).agg({
-        'initial_days': 'sum',
-        'actual_days': 'sum'
-    }).reset_index()
+    df = df[df['status'] == 'active']
+    if df.empty:
+        st.success("✅ Toutes les salles sont disponibles !")
+    else:
+        st.write("🟩 Libre / 🟥 Réservé")
 
+        days_range = pd.date_range(start=date.today(), periods=30)
+        calendar_df = pd.DataFrame(index=days_range, columns=[room for room in pd.read_sql("SELECT name FROM rooms", conn)['name']])
+        calendar_df[:] = "🟩"
+
+        rooms = pd.read_sql("SELECT * FROM rooms", conn)
+        for _, row in df.iterrows():
+            room_name = rooms[rooms.id == row.room_id].name.values[0]
+            for d in pd.date_range(start=row.start_date, end=row.end_date):
+                if d in calendar_df.index:
+                    calendar_df.at[d, room_name] = "🟥"
+
+        st.dataframe(calendar_df.style.set_properties(**{'text-align': 'center'}), height=600)
+
+# --- Tableau récapitulatif ---
+elif choice == "Récapitulatif":
+    st.header("📋 Récapitulatif des réservations")
+    df = load_reservations()
     rooms = pd.read_sql("SELECT * FROM rooms", conn)
-    for rid, grp in stats.groupby('room_id'):
-        name_room = rooms.loc[rooms.id == rid, 'name'].iloc[0]
-        init = int(grp['initial_days'].sum())
-        used = int(grp['actual_days'].sum())
-        rate = used / init * 100 if init > 0 else 0
+    df['Salle'] = df['room_id'].map(dict(zip(rooms['id'], rooms['name'])))
 
-        st.subheader(name_room)
-        st.write(f"- Jours réservés initiaux : {init}")
-        st.write(f"- Jours réellement utilisés : {used}")
-        st.write(f"- Taux d’occupation : {rate:.1f}%")
+    df_display = df[['Salle', 'user', 'project', 'start_date', 'end_date', 'start_time', 'end_time',
+                     'status', 'created_at', 'cancelled_at']]
+    df_display = df_display.rename(columns={
+        'user': 'Utilisateur',
+        'project': 'Projet',
+        'start_date': 'Début',
+        'end_date': 'Fin',
+        'start_time': 'Heure début',
+        'end_time': 'Heure fin',
+        'status': 'Statut',
+        'created_at': 'Réservé le',
+        'cancelled_at': 'Annulé le'
+    })
+
+    AgGrid(df_display.sort_values(by='Début', ascending=False), height=500, fit_columns_on_grid_load=True)
