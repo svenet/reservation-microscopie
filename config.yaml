@@ -1,15 +1,14 @@
 credentials:
   usernames:
-    # Administrateur avec mot de passe "WeierStrass_!1"
     admin_user:
       name: "Administrateur"
       password: "$2b$12$kQJwVWcFSoNZ97vw/f681uQbMvwhhM5wthKtPsjRYnOkQgGPkGwnO"
       role: admin
 
-    # Utilisateur sans mot de passe (hash d'une chaîne vide)
     normal_user:
       name: "Utilisateur"
-      password: "$2b$12$BAMPcOkBfassGfUgO7mf1eWKHzQQ2XBaozixo7zVVS9F1a2fHWwIW"
+      # mot de passe en clair : User_123!
+      password: "$2b$12$eW7K4u0rBq/1DsYIVRMfVuDVwZsZToxF2/pz8nQCp4LK6V7Ytp6pC"
       role: user
 
 cookie:
