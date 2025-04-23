@@ -34,13 +34,14 @@ c.execute('''
         FOREIGN KEY(room_id) REFERENCES rooms(id)
     )
 ''')
+conn.commit()
 
 # --- Initialisation des salles si vide ---
 c.execute("SELECT COUNT(*) FROM rooms")
 if c.fetchone()[0] == 0:
     c.execute("INSERT INTO rooms (name) VALUES (?)", ("Salle Raman - Witec",))
     c.execute("INSERT INTO rooms (name) VALUES (?)", ("Salle microscope inversé - Nikon",))
-conn.commit()
+    conn.commit()
 
 # --- Navigation ---
 st.sidebar.title("Menu")
@@ -50,7 +51,11 @@ choice = st.sidebar.radio("Navigation", pages)
 # --- Chargement des réservations ---
 @st.cache_data
 def load_reservations():
-    return pd.read_sql("SELECT * FROM reservations", conn, parse_dates=['start_date', 'end_date', 'created_at', 'cancelled_at'])
+    return pd.read_sql(
+        "SELECT * FROM reservations", 
+        conn, 
+        parse_dates=['start_date', 'end_date', 'created_at', 'cancelled_at']
+    )
 
 # --- Réservation ---
 if choice == "Réserver":
@@ -64,12 +69,16 @@ if choice == "Réserver":
     end_time = st.time_input("Heure de fin", time(17, 0))
 
     if st.button("Réserver"):
+        # calculs et insertion MAIS uniquement quand on clique
         rid = rooms.loc[rooms['name'] == room, 'id'].iloc[0]
         days = (end - start).days + 1
         created_at = datetime.now().isoformat()
+
         c.execute('''
             INSERT INTO reservations
-            (room_id, start_date, end_date, start_time, end_time, user, project, status, initial_days, actual_days, created_at, cancelled_at)
+              (room_id, start_date, end_date, start_time, end_time,
+               user, project, status, initial_days, actual_days,
+               created_at, cancelled_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, NULL)
         ''', (
             rid,
@@ -92,17 +101,25 @@ elif choice == "Annuler":
     df = load_reservations()
     df_active = df[df['status'] == 'active']
     if not df_active.empty:
-        options = df_active.apply(lambda r: f"{r.id} – {r.user} ({r.start_date.date()}→{r.end_date.date()})", axis=1)
+        options = df_active.apply(
+            lambda r: f"{r.id} – {r.user} ({r.start_date.date()}→{r.end_date.date()})",
+            axis=1
+        )
         sel = st.selectbox("Sélectionnez une réservation", options)
-        if sel:
+        if sel and st.button("Annuler"):
             res_id = int(sel.split(" –")[0])
             used = st.date_input("Date réelle d'arrêt", date.today())
-            start_str = c.execute("SELECT start_date FROM reservations WHERE id=?", (res_id,)).fetchone()[0]
+            start_str = c.execute(
+                "SELECT start_date FROM reservations WHERE id=?", (res_id,)
+            ).fetchone()[0]
             start_dt = datetime.fromisoformat(start_str).date()
             actual = (used - start_dt).days + 1
             cancelled_at = datetime.now().isoformat()
-            c.execute("UPDATE reservations SET status='cancelled', actual_days=?, cancelled_at=? WHERE id=?",
-                      (actual, cancelled_at, res_id))
+
+            c.execute(
+                "UPDATE reservations SET status='cancelled', actual_days=?, cancelled_at=? WHERE id=?",
+                (actual, cancelled_at, res_id)
+            )
             conn.commit()
             st.warning("⚠️ Réservation annulée")
     else:
@@ -111,26 +128,29 @@ elif choice == "Annuler":
 # --- Calendrier (vue publique simplifiée) ---
 elif choice == "Calendrier":
     st.header("Calendrier des disponibilités (vue publique)")
-
     df = load_reservations()
     df = df[df['status'] == 'active']
+
     if df.empty:
         st.success("✅ Toutes les salles sont disponibles !")
     else:
         st.write("🟩 Libre / 🟥 Réservé")
-
         days_range = pd.date_range(start=date.today(), periods=30)
-        calendar_df = pd.DataFrame(index=days_range, columns=[room for room in pd.read_sql("SELECT name FROM rooms", conn)['name']])
+        room_names = pd.read_sql("SELECT name FROM rooms", conn)['name'].tolist()
+        calendar_df = pd.DataFrame(index=days_range, columns=room_names)
         calendar_df[:] = "🟩"
 
         rooms = pd.read_sql("SELECT * FROM rooms", conn)
         for _, row in df.iterrows():
-            room_name = rooms[rooms.id == row.room_id].name.values[0]
+            room_name = rooms.loc[rooms.id == row.room_id, 'name'].iloc[0]
             for d in pd.date_range(start=row.start_date, end=row.end_date):
                 if d in calendar_df.index:
                     calendar_df.at[d, room_name] = "🟥"
 
-        st.dataframe(calendar_df.style.set_properties(**{'text-align': 'center'}), height=600)
+        st.dataframe(
+            calendar_df.style.set_properties(**{'text-align': 'center'}),
+            height=600
+        )
 
 # --- Tableau récapitulatif ---
 elif choice == "Récapitulatif":
@@ -139,8 +159,10 @@ elif choice == "Récapitulatif":
     rooms = pd.read_sql("SELECT * FROM rooms", conn)
     df['Salle'] = df['room_id'].map(dict(zip(rooms['id'], rooms['name'])))
 
-    df_display = df[['Salle', 'user', 'project', 'start_date', 'end_date', 'start_time', 'end_time',
-                     'status', 'created_at', 'cancelled_at']]
+    df_display = df[[
+        'Salle', 'user', 'project', 'start_date', 'end_date', 
+        'start_time', 'end_time', 'status', 'created_at', 'cancelled_at'
+    ]]
     df_display = df_display.rename(columns={
         'user': 'Utilisateur',
         'project': 'Projet',
@@ -153,4 +175,8 @@ elif choice == "Récapitulatif":
         'cancelled_at': 'Annulé le'
     })
 
-    AgGrid(df_display.sort_values(by='Début', ascending=False), height=500, fit_columns_on_grid_load=True)
+    AgGrid(
+        df_display.sort_values(by='Début', ascending=False),
+        height=500,
+        fit_columns_on_grid_load=True
+    )
