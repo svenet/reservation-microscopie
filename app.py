@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 import streamlit as st
 import sqlite3
-from st_aggrid import AgGrid
+from streamlit_aggrid import AgGrid
 import pandas as pd
 from datetime import datetime, date, time
 
