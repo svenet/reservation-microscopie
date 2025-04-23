@@ -1,3 +1,4 @@
 streamlit
 pandas
-yaml
+PyYAML
+streamlit-authenticator
