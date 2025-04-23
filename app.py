@@ -42,7 +42,7 @@ conn.commit()
 c.execute("SELECT COUNT(*) FROM rooms")
 if c.fetchone()[0] == 0:
     c.executemany("INSERT INTO rooms (name) VALUES (?)", [
-        ("Salle Raman - Witec",),
+        ("Salle Raman - Wc",),
         ("Salle microscope inversé - Nikon",)
     ])
     conn.commit()
