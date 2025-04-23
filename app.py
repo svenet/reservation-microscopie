@@ -10,6 +10,7 @@ from streamlit_calendar import calendar  # FullCalendar component
 # --- 1. Authentification et rôles ---
 with open('config.yaml') as f:
     config = yaml.safe_load(f)
+    
 authenticator = stauth.Authenticate(
     config['credentials'],
     config['cookie']['name'],
@@ -18,9 +19,10 @@ authenticator = stauth.Authenticate(
 )
 
 name, auth_status, username = authenticator.login(
-    location='sidebar',
-    fields={'Form name': 'Login'}
+    'sidebar',  
+    'Login'       
 )
+
 
 if not auth_status:
     st.warning("🔒 Veuillez vous authentifier")
@@ -149,4 +151,7 @@ elif choice == "Statistiques":
         st.write(f"- Taux d’occupation : {rate:.1f}%")
 
 # Logout bouton
-authenticator.logout("Logout", "sidebar")
+authenticator.logout(
+    location='sidebar',
+    button_name='Logout'
+)
