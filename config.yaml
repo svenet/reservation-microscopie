@@ -2,7 +2,7 @@ credentials:
   usernames:
     # Administrateur avec mot de passe "WeierStrass_!1"
     admin_user:
-      name: "admin"
+      name: "Administrateur"
       password: "WeierStrass_!1"
       role: admin
 
