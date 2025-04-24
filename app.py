@@ -3,7 +3,7 @@
 import streamlit as st
 import pandas as pd
 import os
-from datetime import datetime, time, date
+from datetime import datetime, time, date, timedelta
 
 RESERVATION_FILE = "reservations.csv"
 HISTORIQUE_FILE = "historique.csv"
@@ -12,6 +12,7 @@ NEW_HISTO_COLS = ["Action", "Début", "Fin", "Salle", "Utilisateur", "Timestamp_
 
 # Heures pleines autorisées (affichage en "8h00" etc.)
 HOUR_LABELS = [f"{h}h00" for h in range(8, 20)]  # 8h00 à 19h00
+HOURS = list(range(8, 20))
 
 # Initialisation des fichiers CSV
 
@@ -30,84 +31,46 @@ def init_files():
     else:
         pd.DataFrame(columns=NEW_HISTO_COLS).to_csv(HISTORIQUE_FILE, index=False)
 
+# Affichage des calendriers hebdomadaires
 
-def reserver(debut, fin, salle, utilisateur):
+def display_weekly_calendar():
+    # calcul de la semaine en cours (lundi à dimanche)
+    today = date.today()
+    start_week = today - timedelta(days=today.weekday())
+    days = [start_week + timedelta(days=i) for i in range(7)]
+    day_labels = [d.strftime('%a %d/%m') for d in days]
+
+    # charger réservations
     df = pd.read_csv(RESERVATION_FILE)
-    df["Début"] = pd.to_datetime(df["Début"])
-    df["Fin"] = pd.to_datetime(df["Fin"])
-    conflit = df[(df["Salle"] == salle) & (
-        ((df["Début"] <= debut) & (df["Fin"] > debut)) |
-        ((df["Début"] < fin) & (df["Fin"] >= fin)) |
-        ((df["Début"] >= debut) & (df["Fin"] <= fin))
-    )]
-    if not conflit.empty:
-        st.warning(f"Un conflit de réservation existe déjà pour la salle {salle} à cette période.")
-        return
-    timestamp = datetime.now().isoformat()
-    new_resa = pd.DataFrame([[debut.isoformat(), fin.isoformat(), salle, utilisateur, timestamp]], columns=NEW_RESA_COLS)
-    df_out = pd.concat([df, new_resa], ignore_index=True)
-    df_out["Début"] = df_out["Début"].astype(str)
-    df_out["Fin"] = df_out["Fin"].astype(str)
-    df_out.to_csv(RESERVATION_FILE, index=False)
-    histo = pd.read_csv(HISTORIQUE_FILE)
-    entry = ["Réservation", debut.isoformat(), fin.isoformat(), salle, utilisateur, timestamp, ""]
-    histo = pd.concat([histo, pd.DataFrame([entry], columns=NEW_HISTO_COLS)], ignore_index=True)
-    histo.to_csv(HISTORIQUE_FILE, index=False)
-    st.success(f"Réservation enregistrée pour la salle {salle}.")
-
-
-def annuler(debut, fin, salle, utilisateur):
-    df = pd.read_csv(RESERVATION_FILE)
-    df["Début"] = pd.to_datetime(df["Début"])
-    df["Fin"] = pd.to_datetime(df["Fin"])
-    mask_user = (df["Salle"] == salle) & (df["Utilisateur"] == utilisateur)
-    to_process = df[mask_user]
-    updated = []
-    removed = []
-    for _, row in to_process.iterrows():
-        r_start = row["Début"]
-        r_end = row["Fin"]
-        if fin <= r_start or debut >= r_end:
-            updated.append(row)
-            continue
-        if debut <= r_start and fin >= r_end:
-            removed.append((r_start, r_end))
-            continue
-        if debut <= r_start < fin < r_end:
-            new_start = fin
-            updated.append({"Début": new_start, "Fin": r_end, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
-            removed.append((r_start, fin))
-            continue
-        if r_start < debut < r_end <= fin:
-            new_end = debut
-            updated.append({"Début": r_start, "Fin": new_end, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
-            removed.append((debut, r_end))
-            continue
-        if r_start < debut and fin < r_end:
-            updated.append({"Début": r_start, "Fin": debut, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
-            updated.append({"Début": fin, "Fin": r_end, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
-            removed.append((debut, fin))
-            continue
-    others = df[~mask_user]
-    if updated:
-        df_updated = pd.DataFrame(updated)
-        df_updated["Début"] = df_updated["Début"].astype(str)
-        df_updated["Fin"] = df_updated["Fin"].astype(str)
-        df_out = pd.concat([others, df_updated], ignore_index=True)
-    else:
-        df_out = others.copy()
-    df_out.to_csv(RESERVATION_FILE, index=False)
-    histo = pd.read_csv(HISTORIQUE_FILE)
-    timestamp = datetime.now().isoformat()
-    for rem in removed:
-        entry = ["Annulation partielle", rem[0].isoformat(), rem[1].isoformat(), salle, utilisateur, "", timestamp]
-        histo = pd.concat([histo, pd.DataFrame([entry], columns=NEW_HISTO_COLS)], ignore_index=True)
-    histo.to_csv(HISTORIQUE_FILE, index=False)
-    st.success(f"Annulation effectuée pour l'intervalle spécifié sur la salle {salle}.")
+    if not df.empty:
+        df['Début'] = pd.to_datetime(df['Début'])
+        df['Fin'] = pd.to_datetime(df['Fin'])
+    
+    for salle in ["Raman", "Fluorescence inversé"]:
+        # initialiser matrice disponibilité
+        cal = pd.DataFrame(index=HOUR_LABELS, columns=day_labels)
+        cal.fillna("Libre", inplace=True)
+        # marquer réservations
+        df_s = df[df['Salle'] == salle]
+        for _, row in df_s.iterrows():
+            start = row['Début']
+            end = row['Fin']
+            for d, label in zip(days, day_labels):
+                # pour chaque heure
+                for h, h_lbl in zip(HOURS, HOUR_LABELS):
+                    slot_start = datetime.combine(d, time(h, 0))
+                    slot_end = slot_start + timedelta(hours=1)
+                    if start < slot_end and end > slot_start:
+                        cal.at[h_lbl, label] = "Occupé"
+        st.subheader(f"Disponibilités semaine ({day_labels[0]} - {day_labels[-1]}) - Salle {salle}")
+        st.table(cal)
 
 # --- Application Streamlit ---
 init_files()
 st.title("Réservation des salles de microscopie")
+
+# afficher calendriers en tout début
+display_weekly_calendar()
 
 st.header("Nouvelle réservation")
 with st.form("reservation_form"):
@@ -120,7 +83,6 @@ with st.form("reservation_form"):
     salle_fluo = st.checkbox("Salle Fluorescence inversé", key="resa_fluo")
     submit_resa = st.form_submit_button("Réserver")
     if submit_resa and utilisateur_resa:
-        # conversion des labels "8h00" -> heure int
         debut_hour = int(heure_debut_lbl.replace('h00',''))
         fin_hour = int(heure_fin_lbl.replace('h00',''))
         debut_dt = datetime.combine(date_debut, time(debut_hour, 0))
