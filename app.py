@@ -3,8 +3,6 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime, date, time
-from st_aggrid import AgGrid
-from streamlit_calendar import calendar
 
 # --- Connexion base de données ---
 conn = sqlite3.connect('reservations.db', check_same_thread=False)
@@ -123,64 +121,3 @@ elif choice == "Annuler":
             conn.commit()
             st.warning("⚠️ Réservation annulée avec succès.")
 
-# --- Calendrier ---
-elif choice == "Calendrier":
-    st.header("Disponibilités (08h–18h)")
-    df = load_reservations()
-    df = df[df.status == 'active']
-    rooms = pd.read_sql("SELECT * FROM rooms", conn)
-    events_by_room = {}
-    for rid, name in zip(rooms.id, rooms.name):
-        events = []
-        for _, r in df[df.room_id == rid].iterrows():
-            events.append({
-                "title": r.user,
-                "start": f"{r.start_date.date()}T{r.start_time}",
-                "end": f"{r.end_date.date()}T{r.end_time}"
-            })
-        events_by_room[rid] = events
-
-    options = {
-        "initialView": "timeGridWeek",
-        "locale": "fr",
-        "firstDay": 1,
-        "slotMinTime": "08:00:00",
-        "slotMaxTime": "18:00:00",
-        "allDaySlot": False,
-        "headerToolbar": {
-            "left": "prev,next today",
-            "center": "title",
-            "right": "timeGridWeek"
-        }
-    }
-
-    for rid in rooms.id:
-        st.subheader(rooms.loc[rooms.id == rid, 'name'].iloc[0])
-        calendar(events=events_by_room[rid], options=options)
-
-# --- Récapitulatif ---
-elif choice == "Récapitulatif":
-    st.header("📋 Récapitulatif des réservations")
-    df = load_reservations()
-    rooms_df = pd.read_sql("SELECT * FROM rooms", conn)
-    df['Salle'] = df['room_id'].map(dict(zip(rooms_df['id'], rooms_df['name'])))
-    df_display = df[[
-        'Salle', 'user', 'project', 'start_date', 'end_date',
-        'start_time', 'end_time', 'status', 'created_at', 'cancelled_at']]
-    df_display = df_display.rename(columns={
-        'user': 'Utilisateur',
-        'project': 'Projet',
-        'start_date': 'Début',
-        'end_date': 'Fin',
-        'start_time': 'Heure début',
-        'end_time': 'Heure fin',
-        'status': 'Statut',
-        'created_at': 'Réservé le',
-        'cancelled_at': 'Annulé le'
-    })
-
-    st.dataframe(
-        df_display.sort_values(by='Début', ascending=False),
-        use_container_width=True,
-        height=500
-    )
