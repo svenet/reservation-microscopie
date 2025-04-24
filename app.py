@@ -7,35 +7,52 @@ from datetime import datetime, time, date
 
 RESERVATION_FILE = "reservations.csv"
 HISTORIQUE_FILE = "historique.csv"
+NEW_RESA_COLS = ["Début", "Fin", "Salle", "Utilisateur", "Timestamp_resa"]
+NEW_HISTO_COLS = ["Action", "Début", "Fin", "Salle", "Utilisateur", "Timestamp_resa", "Timestamp_annulation"]
 
-# Initialisation des fichiers CSV
+# Initialisation des fichiers CSV avec migration si ancien format détecté
 
 def init_files():
-    if not os.path.exists(RESERVATION_FILE):
-        pd.DataFrame(columns=["Début", "Fin", "Salle", "Utilisateur", "Timestamp_resa"]).to_csv(RESERVATION_FILE, index=False)
-    if not os.path.exists(HISTORIQUE_FILE):
-        pd.DataFrame(columns=["Action", "Début", "Fin", "Salle", "Utilisateur", "Timestamp_resa", "Timestamp_annulation"]).to_csv(HISTORIQUE_FILE, index=False)
+    # Réservations
+    if os.path.exists(RESERVATION_FILE):
+        df = pd.read_csv(RESERVATION_FILE)
+        # Si colonnes anciennes ou manquantes, réinitialiser
+        if not all(col in df.columns for col in NEW_RESA_COLS):
+            st.warning("Ancien fichier de réservations détecté : réinitialisation du fichier.")
+            pd.DataFrame(columns=NEW_RESA_COLS).to_csv(RESERVATION_FILE, index=False)
+    else:
+        pd.DataFrame(columns=NEW_RESA_COLS).to_csv(RESERVATION_FILE, index=False)
+
+    # Historique
+    if os.path.exists(HISTORIQUE_FILE):
+        dfh = pd.read_csv(HISTORIQUE_FILE)
+        if not all(col in dfh.columns for col in NEW_HISTO_COLS):
+            st.warning("Ancien fichier d'historique détecté : réinitialisation du fichier.")
+            pd.DataFrame(columns=NEW_HISTO_COLS).to_csv(HISTORIQUE_FILE, index=False)
+    else:
+        pd.DataFrame(columns=NEW_HISTO_COLS).to_csv(HISTORIQUE_FILE, index=False)
 
 
 def reserver(debut, fin, salle, utilisateur):
     df = pd.read_csv(RESERVATION_FILE)
     # Vérification de conflit
     conflit = df[(df["Salle"] == salle) & (
-        ((df["Début"] <= debut) & (df["Fin"] > debut)) |
-        ((df["Début"] < fin) & (df["Fin"] >= fin)) |
-        ((df["Début"] >= debut) & (df["Fin"] <= fin))
+        ((pd.to_datetime(df["Début"]) <= debut) & (pd.to_datetime(df["Fin"]) > debut)) |
+        ((pd.to_datetime(df["Début"]) < fin) & (pd.to_datetime(df["Fin"]) >= fin)) |
+        ((pd.to_datetime(df["Début"]) >= debut) & (pd.to_datetime(df["Fin"]) <= fin))
     )]
     if not conflit.empty:
         st.warning(f"Un conflit de réservation existe déjà pour la salle {salle} à cette période.")
         return
     # Enregistrement
     timestamp = datetime.now().isoformat()
-    new_resa = pd.DataFrame([[debut.isoformat(), fin.isoformat(), salle, utilisateur, timestamp]], columns=df.columns)
+    new_resa = pd.DataFrame([[debut.isoformat(), fin.isoformat(), salle, utilisateur, timestamp]], columns=NEW_RESA_COLS)
     df = pd.concat([df, new_resa], ignore_index=True)
     df.to_csv(RESERVATION_FILE, index=False)
     # Historique
     histo = pd.read_csv(HISTORIQUE_FILE)
-    histo = pd.concat([histo, pd.DataFrame([["Réservation", debut.isoformat(), fin.isoformat(), salle, utilisateur, timestamp, ""]], columns=histo.columns)], ignore_index=True)
+    entry = ["Réservation", debut.isoformat(), fin.isoformat(), salle, utilisateur, timestamp, ""]
+    histo = pd.concat([histo, pd.DataFrame([entry], columns=NEW_HISTO_COLS)], ignore_index=True)
     histo.to_csv(HISTORIQUE_FILE, index=False)
     st.success(f"Réservation enregistrée pour la salle {salle}.")
 
@@ -50,7 +67,8 @@ def annuler(debut, fin, salle, utilisateur):
     df.to_csv(RESERVATION_FILE, index=False)
     timestamp = datetime.now().isoformat()
     histo = pd.read_csv(HISTORIQUE_FILE)
-    histo = pd.concat([histo, pd.DataFrame([["Annulation", debut.isoformat(), fin.isoformat(), salle, utilisateur, "", timestamp]], columns=histo.columns)], ignore_index=True)
+    entry = ["Annulation", debut.isoformat(), fin.isoformat(), salle, utilisateur, "", timestamp]
+    histo = pd.concat([histo, pd.DataFrame([entry], columns=NEW_HISTO_COLS)], ignore_index=True)
     histo.to_csv(HISTORIQUE_FILE, index=False)
     st.success(f"Réservation annulée pour la salle {salle}.")
 
