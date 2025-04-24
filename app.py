@@ -139,7 +139,7 @@ st.title("Réservation des salles de microscopie")
 
 today = date.today()
 default_monday = today - timedelta(days=today.weekday())
-week_start = st.date_input("Semaine du (lundi)", value=default_monday, help="Choisissez le lundi de la semaine à afficher")
+week_start = st.date_input("Semaine du", value=default_monday, help="Choisissez le lundi de la semaine à afficher")
 
 # Calendriers
 "display_weekly_calendar(week_start)"
