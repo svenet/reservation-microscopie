@@ -41,22 +41,28 @@ def init_files():
     else:
         pd.DataFrame(columns=NEW_HISTO_COLS).to_csv(HISTORIQUE_FILE, index=False)
 
-# --- Email function ---
+# --- Email function with error handling ---
 def send_history_email():
-    with open(HISTORIQUE_FILE, "rb") as f:
-        data = f.read()
-    msg = EmailMessage()
-    msg["Subject"] = "Historique des réservations microscopie"
-    msg["From"] = EMAIL_USER
-    msg["To"] = EMAIL_TO
-    msg.set_content("Vous trouverez en pièce jointe l'historique des réservations et annulations.")
-    msg.add_attachment(data, maintype="text", subtype="csv", filename=HISTORIQUE_FILE)
-    context = ssl.create_default_context()
-    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-        server.starttls(context=context)
-        server.login(EMAIL_USER, EMAIL_PASSWORD)
-        server.send_message(msg)
-    st.success(f"Historique envoyé à {EMAIL_TO}")
+    if not SMTP_SERVER or not EMAIL_USER or not EMAIL_PASSWORD:
+        st.error("Les paramètres SMTP ne sont pas configurés. Veuillez définir vos secrets dans Streamlit Cloud.")
+        return
+    try:
+        with open(HISTORIQUE_FILE, "rb") as f:
+            data = f.read()
+        msg = EmailMessage()
+        msg["Subject"] = "Historique des réservations microscopie"
+        msg["From"] = EMAIL_USER
+        msg["To"] = EMAIL_TO
+        msg.set_content("Vous trouverez en pièce jointe l'historique des réservations et annulations.")
+        msg.add_attachment(data, maintype="text", subtype="csv", filename=HISTORIQUE_FILE)
+        context = ssl.create_default_context()
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10) as server:
+            server.starttls(context=context)
+            server.login(EMAIL_USER, EMAIL_PASSWORD)
+            server.send_message(msg)
+        st.success(f"Historique envoyé à {EMAIL_TO}")
+    except Exception as e:
+        st.error(f"Échec de l'envoi de l'email : {e}")
 
 # --- Réservation / Annulation ---
 def reserver(debut, fin, salle, utilisateur):
