@@ -66,7 +66,6 @@ def annuler(debut, fin, salle, utilisateur):
     to_process = df[mask_user]
     updated = []
     removed = []
-    # traiter chaque réservation de l'utilisateur
     for _, row in to_process.iterrows():
         r_start = row["Début"]
         r_end = row["Fin"]
@@ -129,7 +128,9 @@ def display_weekly_calendar(start_week: date):
                     if start < slot_end and end > slot_start:
                         cal.at[h_lbl, label] = "Occupé"
         st.subheader(f"Disponibilités semaine ({day_labels[0]} - {day_labels[-1]}) - Salle {salle}")
-        st.table(cal)
+        # Appliquer style pour afficher 'Occupé' en rouge
+        styled = cal.style.applymap(lambda v: 'color: white; background-color: red' if v == 'Occupé' else '')
+        st.dataframe(styled)
 
 # --- Application Streamlit ---
 init_files()
