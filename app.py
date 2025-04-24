@@ -100,7 +100,7 @@ def annuler(debut, fin, salle, utilisateur):
     histo = pd.read_csv(HISTORIQUE_FILE)
     timestamp = datetime.now().isoformat()
     for rem in removed:
-        entry = ["Annulation partielle", rem[0].isoformat(), rem[1].isoformat(), salle, utilisateur, "", timestamp]
+        entry = ["Annulation", rem[0].isoformat(), rem[1].isoformat(), salle, utilisateur, "", timestamp]
         histo = pd.concat([histo, pd.DataFrame([entry], columns=NEW_HISTO_COLS)], ignore_index=True)
     histo.to_csv(HISTORIQUE_FILE, index=False)
     st.success(f"Annulation effectuée pour l'intervalle spécifié sur la salle {salle}.")
@@ -142,7 +142,6 @@ default_monday = today - timedelta(days=today.weekday())
 week_start = st.date_input("Semaine du", value=default_monday, help="Choisissez le lundi de la semaine à afficher")
 
 # Calendriers
-"display_weekly_calendar(week_start)"
 display_weekly_calendar(week_start)
 
 st.header("Nouvelle réservation")
