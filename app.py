@@ -23,7 +23,7 @@ def reserver(debut, fin, salle, utilisateur):
         ((df["Début"] >= debut) & (df["Fin"] <= fin))
     )]
     if not conflit.empty:
-        st.warning("Un conflit de réservation existe déjà pour cette salle à cette période.")
+        st.warning(f"Un conflit de réservation existe déjà pour la salle {salle} à cette période.")
         return
     timestamp = datetime.now().isoformat()
     new_resa = pd.DataFrame([[debut, fin, salle, utilisateur, timestamp]], columns=df.columns)
@@ -32,13 +32,13 @@ def reserver(debut, fin, salle, utilisateur):
     histo = pd.read_csv(HISTORIQUE_FILE)
     histo = pd.concat([histo, pd.DataFrame([["Réservation", debut, fin, salle, utilisateur, timestamp, ""]], columns=histo.columns)], ignore_index=True)
     histo.to_csv(HISTORIQUE_FILE, index=False)
-    st.success("Réservation enregistrée.")
+    st.success(f"Réservation enregistrée pour la salle {salle}.")
 
 def annuler(debut, fin, salle, utilisateur):
     df = pd.read_csv(RESERVATION_FILE)
     mask = (df["Début"] == debut) & (df["Fin"] == fin) & (df["Salle"] == salle) & (df["Utilisateur"] == utilisateur)
     if not mask.any():
-        st.warning("Réservation non trouvée.")
+        st.warning(f"Réservation non trouvée pour la salle {salle}.")
         return
     df = df[~mask]
     df.to_csv(RESERVATION_FILE, index=False)
@@ -46,7 +46,7 @@ def annuler(debut, fin, salle, utilisateur):
     histo = pd.read_csv(HISTORIQUE_FILE)
     histo = pd.concat([histo, pd.DataFrame([["Annulation", debut, fin, salle, utilisateur, "", timestamp]], columns=histo.columns)], ignore_index=True)
     histo.to_csv(HISTORIQUE_FILE, index=False)
-    st.success("Réservation annulée.")
+    st.success(f"Réservation annulée pour la salle {salle}.")
 
 # Initialisation
 init_files()
@@ -54,31 +54,31 @@ st.title("Réservation des salles de microscopie")
 
 st.header("Nouvelle réservation")
 with st.form("reservation_form"):
-    utilisateur = st.text_input("Nom de l'utilisateur")
-    debut = st.datetime_input("Début de la réservation")
-    fin = st.datetime_input("Fin de la réservation")
-    salle_raman = st.checkbox("Salle Raman")
-    salle_fluo = st.checkbox("Salle Fluorescence inversé")
-    submitted = st.form_submit_button("Réserver")
-    if submitted and utilisateur:
-        if salle_raman:
-            reserver(str(debut), str(fin), "Raman", utilisateur)
-        if salle_fluo:
-            reserver(str(debut), str(fin), "Fluorescence inversé", utilisateur)
+    utilisateur_resa = st.text_input("Nom de l'utilisateur", key="resa_user")
+    debut_resa = st.datetime_input("Début de la réservation", key="resa_debut")
+    fin_resa = st.datetime_input("Fin de la réservation", key="resa_fin")
+    salle_raman_resa = st.checkbox("Salle Raman", key="resa_raman")
+    salle_fluo_resa = st.checkbox("Salle Fluorescence inversé", key="resa_fluo")
+    submit_resa = st.form_submit_button("Réserver")
+    if submit_resa and utilisateur_resa:
+        if salle_raman_resa:
+            reserver(str(debut_resa), str(fin_resa), "Raman", utilisateur_resa)
+        if salle_fluo_resa:
+            reserver(str(debut_resa), str(fin_resa), "Fluorescence inversé", utilisateur_resa)
 
 st.header("Annuler une réservation")
 with st.form("annulation_form"):
-    utilisateur = st.text_input("Nom de l'utilisateur pour annulation")
-    debut = st.datetime_input("Début de la réservation à annuler", key="annul_debut")
-    fin = st.datetime_input("Fin de la réservation à annuler", key="annul_fin")
-    salle_raman = st.checkbox("Salle Raman", key="annul_raman")
-    salle_fluo = st.checkbox("Salle Fluorescence inversé", key="annul_fluo")
-    submitted = st.form_submit_button("Annuler")
-    if submitted and utilisateur:
-        if salle_raman:
-            annuler(str(debut), str(fin), "Raman", utilisateur)
-        if salle_fluo:
-            annuler(str(debut), str(fin), "Fluorescence inversé", utilisateur)
+    utilisateur_annul = st.text_input("Nom de l'utilisateur pour annulation", key="annul_user")
+    debut_annul = st.datetime_input("Début de la réservation à annuler", key="annul_debut")
+    fin_annul = st.datetime_input("Fin de la réservation à annuler", key="annul_fin")
+    salle_raman_annul = st.checkbox("Salle Raman", key="annul_raman")
+    salle_fluo_annul = st.checkbox("Salle Fluorescence inversé", key="annul_fluo")
+    submit_annul = st.form_submit_button("Annuler")
+    if submit_annul and utilisateur_annul:
+        if salle_raman_annul:
+            annuler(str(debut_annul), str(fin_annul), "Raman", utilisateur_annul)
+        if salle_fluo_annul:
+            annuler(str(debut_annul), str(fin_annul), "Fluorescence inversé", utilisateur_annul)
 
 st.header("Historique des réservations et annulations")
 histo = pd.read_csv(HISTORIQUE_FILE)
