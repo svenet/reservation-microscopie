@@ -3,19 +3,29 @@
 import streamlit as st
 import pandas as pd
 import os
+import smtplib
+import ssl
+from email.message import EmailMessage
 from datetime import datetime, time, date, timedelta
 
+# --- Config ---
 RESERVATION_FILE = "reservations.csv"
 HISTORIQUE_FILE = "historique.csv"
+EMAIL_TO = "pomisop@univ-pau.fr"
+# Variables d'environnement pour SMTP (configurées via Streamlit Cloud Secrets)
+SMTP_SERVER = os.getenv("SMTP_SERVER")  # ex. "smtp.gmail.com"
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+EMAIL_USER = os.getenv("EMAIL_USER")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+
 NEW_RESA_COLS = ["Début", "Fin", "Salle", "Utilisateur", "Timestamp_resa"]
 NEW_HISTO_COLS = ["Action", "Début", "Fin", "Salle", "Utilisateur", "Timestamp_resa", "Timestamp_annulation"]
 
-# Heures pleines autorisées (affichage en "8h00" etc.)
-HOUR_LABELS = [f"{h}h00" for h in range(8, 20)]  # 8h00 à 19h00
+# Heures pleines autorisées (affichage "8h00"..."19h00")
+HOUR_LABELS = [f"{h}h00" for h in range(8, 20)]
 HOURS = list(range(8, 20))
 
-# Initialisation des fichiers CSV
-
+# --- Init CSV ---
 def init_files():
     if os.path.exists(RESERVATION_FILE):
         df = pd.read_csv(RESERVATION_FILE)
@@ -31,8 +41,24 @@ def init_files():
     else:
         pd.DataFrame(columns=NEW_HISTO_COLS).to_csv(HISTORIQUE_FILE, index=False)
 
-# Fonctions de gestion des réservations
+# --- Email function ---
+def send_history_email():
+    with open(HISTORIQUE_FILE, "rb") as f:
+        data = f.read()
+    msg = EmailMessage()
+    msg["Subject"] = "Historique des réservations microscopie"
+    msg["From"] = EMAIL_USER
+    msg["To"] = EMAIL_TO
+    msg.set_content("Vous trouverez en pièce jointe l'historique des réservations et annulations.")
+    msg.add_attachment(data, maintype="text", subtype="csv", filename=HISTORIQUE_FILE)
+    context = ssl.create_default_context()
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        server.starttls(context=context)
+        server.login(EMAIL_USER, EMAIL_PASSWORD)
+        server.send_message(msg)
+    st.success(f"Historique envoyé à {EMAIL_TO}")
 
+# --- Réservation / Annulation ---
 def reserver(debut, fin, salle, utilisateur):
     df = pd.read_csv(RESERVATION_FILE)
     df["Début"] = pd.to_datetime(df["Début"])
@@ -57,7 +83,6 @@ def reserver(debut, fin, salle, utilisateur):
     histo.to_csv(HISTORIQUE_FILE, index=False)
     st.success(f"Réservation enregistrée pour la salle {salle}.")
 
-
 def annuler(debut, fin, salle, utilisateur):
     df = pd.read_csv(RESERVATION_FILE)
     df["Début"] = pd.to_datetime(df["Début"])
@@ -67,27 +92,22 @@ def annuler(debut, fin, salle, utilisateur):
     updated = []
     removed = []
     for _, row in to_process.iterrows():
-        r_start = row["Début"]
-        r_end = row["Fin"]
+        r_start, r_end = row["Début"], row["Fin"]
         if fin <= r_start or debut >= r_end:
             updated.append(row)
             continue
         if debut <= r_start and fin >= r_end:
-            removed.append((r_start, r_end))
-            continue
+            removed.append((r_start, r_end)); continue
         if debut <= r_start < fin < r_end:
             updated.append({"Début": fin, "Fin": r_end, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
-            removed.append((r_start, fin))
-            continue
+            removed.append((r_start, fin)); continue
         if r_start < debut < r_end <= fin:
             updated.append({"Début": r_start, "Fin": debut, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
-            removed.append((debut, r_end))
-            continue
+            removed.append((debut, r_end)); continue
         if r_start < debut and fin < r_end:
             updated.append({"Début": r_start, "Fin": debut, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
             updated.append({"Début": fin, "Fin": r_end, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
             removed.append((debut, fin))
-            continue
     others = df[~mask_user]
     if updated:
         df_updated = pd.DataFrame(updated)
@@ -105,93 +125,65 @@ def annuler(debut, fin, salle, utilisateur):
     histo.to_csv(HISTORIQUE_FILE, index=False)
     st.success(f"Annulation effectuée pour l'intervalle spécifié sur la salle {salle}.")
 
-# Affichage des calendriers hebdomadaires pour une semaine donnée
-
+# --- Affichage Calendrier ---
 def display_weekly_calendar(start_week: date):
     days = [start_week + timedelta(days=i) for i in range(7)]
     day_labels = [d.strftime('%a %d/%m') for d in days]
     df = pd.read_csv(RESERVATION_FILE)
     if not df.empty:
-        df['Début'] = pd.to_datetime(df['Début'])
-        df['Fin'] = pd.to_datetime(df['Fin'])
+        df['Début'] = pd.to_datetime(df['Début']); df['Fin'] = pd.to_datetime(df['Fin'])
     for salle in ["Raman", "Fluorescence inversé"]:
-        cal = pd.DataFrame(index=HOUR_LABELS, columns=day_labels)
-        cal.fillna("Libre", inplace=True)
+        cal = pd.DataFrame(index=HOUR_LABELS, columns=day_labels).fillna("Libre")
         df_s = df[df['Salle'] == salle]
         for _, row in df_s.iterrows():
-            start = row['Début']
-            end = row['Fin']
+            start, end = row['Début'], row['Fin']
             for d, label in zip(days, day_labels):
                 for h, h_lbl in zip(HOURS, HOUR_LABELS):
-                    slot_start = datetime.combine(d, time(h, 0))
-                    slot_end = slot_start + timedelta(hours=1)
+                    slot_start = datetime.combine(d, time(h,0)); slot_end = slot_start + timedelta(hours=1)
                     if start < slot_end and end > slot_start:
                         cal.at[h_lbl, label] = "Occupé"
         st.subheader(f"Disponibilités semaine ({day_labels[0]} - {day_labels[-1]}) - Salle {salle}")
-        # Appliquer style pour afficher 'Occupé' en rouge
-        styled = cal.style.applymap(lambda v: 'color: white; background-color: red' if v == 'Occupé' else '')
+        styled = cal.style.applymap(lambda v: 'color:white;background-color:red' if v=='Occupé' else '')
         st.dataframe(styled)
 
-# --- Application Streamlit ---
-init_files()
-st.title("Réservation des salles de microscopie")
+# --- Streamlit UI ---
+init_files(); st.title("Réservation des salles de microscopie")
+if st.button("Envoyer l'historique par email"):
+    send_history_email()
 # Sélecteur de semaine
-
-today = date.today()
-default_monday = today - timedelta(days=today.weekday())
-week_start = st.date_input("Semaine du (lundi)", value=default_monday, help="Choisissez le lundi de la semaine à afficher")
-
-# Calendriers
-"display_weekly_calendar(week_start)"
+week_start = st.date_input("Semaine du (lundi)", value=date.today()-timedelta(days=date.today().weekday()))
+# Afficher calendriers
 display_weekly_calendar(week_start)
-
+# Formulaires réservation et annulation (inchangés)
 st.header("Nouvelle réservation")
 with st.form("reservation_form"):
-    utilisateur_resa = st.text_input("Nom de l'utilisateur", key="resa_user")
-    date_debut = st.date_input("Date de début", key="resa_date_debut")
-    heure_debut_lbl = st.selectbox("Heure de début", HOUR_LABELS, key="resa_h_debut")
-    date_fin = st.date_input("Date de fin", key="resa_date_fin")
-    heure_fin_lbl = st.selectbox("Heure de fin", HOUR_LABELS, key="resa_h_fin")
-    salle_raman = st.checkbox("Salle Raman", key="resa_raman")
-    salle_fluo = st.checkbox("Salle Fluorescence inversé", key="resa_fluo")
-    submit_resa = st.form_submit_button("Réserver")
-    if submit_resa and utilisateur_resa:
-        debut_hour = int(heure_debut_lbl.replace('h00',''))
-        fin_hour = int(heure_fin_lbl.replace('h00',''))
-        debut_dt = datetime.combine(date_debut, time(debut_hour, 0))
-        fin_dt = datetime.combine(date_fin, time(fin_hour, 0))
-        if fin_dt <= debut_dt:
-            st.error("La date/heure de fin doit être après la date/heure de début.")
+    user = st.text_input("Nom de l'utilisateur", key="resa_user")
+    d1 = st.date_input("Date de début", key="resa_date_debut")
+    h1 = st.selectbox("Heure de début", HOUR_LABELS, key="resa_h_debut")
+    d2 = st.date_input("Date de fin", key="resa_date_fin")
+    h2 = st.selectbox("Heure de fin", HOUR_LABELS, key="resa_h_fin")
+    cb1 = st.checkbox("Salle Raman", key="resa_raman")
+    cb2 = st.checkbox("Salle Fluorescence inversé", key="resa_fluo")
+    if st.form_submit_button("Réserver") and user:
+        dt1 = datetime.combine(d1, time(int(h1.replace('h00','')),0))
+        dt2 = datetime.combine(d2, time(int(h2.replace('h00','')),0))
+        if dt2<=dt1: st.error("Fin doit être après début.")
         else:
-            if salle_raman:
-                reserver(debut_dt, fin_dt, "Raman", utilisateur_resa)
-            if salle_fluo:
-                reserver(debut_dt, fin_dt, "Fluorescence inversé", utilisateur_resa)
-
+            if cb1: reserver(dt1, dt2, "Raman", user)
+            if cb2: reserver(dt1, dt2, "Fluorescence inversé", user)
 st.header("Annuler une réservation")
 with st.form("annulation_form"):
-    utilisateur_annul = st.text_input("Nom de l'utilisateur pour annulation", key="annul_user")
-    date_debut_a = st.date_input("Date de début à annuler", key="annul_date_debut")
-    heure_debut_lbl_a = st.selectbox("Heure de début à annuler", HOUR_LABELS, key="annul_h_debut")
-    date_fin_a = st.date_input("Date de fin à annuler", key="annul_date_fin")
-    heure_fin_lbl_a = st.selectbox("Heure de fin à annuler", HOUR_LABELS, key="annul_h_fin")
-    salle_raman_a = st.checkbox("Salle Raman", key="annul_raman")
-    salle_fluo_a = st.checkbox("Salle Fluorescence inversé", key="annul_fluo")
-    submit_annul = st.form_submit_button("Annuler")
-    if submit_annul and utilisateur_annul:
-        debut_hour_a = int(heure_debut_lbl_a.replace('h00',''))
-        fin_hour_a = int(heure_fin_lbl_a.replace('h00',''))
-        debut_a = datetime.combine(date_debut_a, time(debut_hour_a, 0))
-        fin_a = datetime.combine(date_fin_a, time(fin_hour_a, 0))
-        if fin_a <= debut_a:
-            st.error("La date/heure de fin doit être après la date/heure de début.")
+    user2 = st.text_input("Nom de l'utilisateur pour annulation", key="annul_user")
+    da1 = st.date_input("Date de début à annuler", key="annul_date_debut")
+    ha1 = st.selectbox("Heure de début à annuler", HOUR_LABELS, key="annul_h_debut")
+    da2 = st.date_input("Date de fin à annuler", key="annul_date_fin")
+    ha2 = st.selectbox("Heure de fin à annuler", HOUR_LABELS, key="annul_h_fin")
+    cb3 = st.checkbox("Salle Raman", key="annul_raman")
+    cb4 = st.checkbox("Salle Fluorescence inversé", key="annul_fluo")
+    if st.form_submit_button("Annuler") and user2:
+        dtA1 = datetime.combine(da1, time(int(ha1.replace('h00','')),0))
+        dtA2 = datetime.combine(da2, time(int(ha2.replace('h00','')),0))
+        if dtA2<=dtA1: st.error("Fin doit être après début.")
         else:
-            if salle_raman_a:
-                annuler(debut_a, fin_a, "Raman", utilisateur_annul)
-            if salle_fluo_a:
-                annuler(debut_a, fin_a, "Fluorescence inversé", utilisateur_annul)
-
-st.header("Historique des réservations et annulations")
-
-histo = pd.read_csv(HISTORIQUE_FILE)
-st.dataframe(histo.sort_values(by=["Timestamp_resa", "Timestamp_annulation"], ascending=False))
+            if cb3: annuler(dtA1, dtA2, "Raman", user2)
+            if cb4: annuler(dtA1, dtA2, "Fluorescence inversé", user2)
