@@ -7,8 +7,8 @@ from datetime import datetime, time, date, timedelta
 
 RESERVATION_FILE = "reservations.csv"
 HISTORIQUE_FILE = "historique.csv"
-NEW_RESA_COLS = ["Début", "Fin", "Salle", "Utilisateur", "Timestamp_resa"]
-NEW_HISTO_COLS = ["Action", "Début", "Fin", "Salle", "Utilisateur", "Timestamp_resa", "Timestamp_annulation"]
+NEW_RESA_COLS = ["Début", "Fin", "Salle", "Utilisateur", "Timestamp"]
+NEW_HISTO_COLS = ["Action", "Début", "Fin", "Salle", "Utilisateur", "Timestamp"]
 
 # Heures pleines autorisées (affichage en "8h00" etc.)
 HOUR_LABELS = [f"{h}h00" for h in range(8, 20)]  # 8h00 à 19h00
@@ -76,16 +76,16 @@ def annuler(debut, fin, salle, utilisateur):
             removed.append((r_start, r_end))
             continue
         if debut <= r_start < fin < r_end:
-            updated.append({"Début": fin, "Fin": r_end, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
+            updated.append({"Début": fin, "Fin": r_end, "Salle": salle, "Utilisateur": utilisateur, "Timestamp": row["Timestamp"]})
             removed.append((r_start, fin))
             continue
         if r_start < debut < r_end <= fin:
-            updated.append({"Début": r_start, "Fin": debut, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
+            updated.append({"Début": r_start, "Fin": debut, "Salle": salle, "Utilisateur": utilisateur, "Timestamp": row["Timestamp"]})
             removed.append((debut, r_end))
             continue
         if r_start < debut and fin < r_end:
-            updated.append({"Début": r_start, "Fin": debut, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
-            updated.append({"Début": fin, "Fin": r_end, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
+            updated.append({"Début": r_start, "Fin": debut, "Salle": salle, "Utilisateur": utilisateur, "Timestamp": row["Timestamp"]})
+            updated.append({"Début": fin, "Fin": r_end, "Salle": salle, "Utilisateur": utilisateur, "Timestamp": row["Timestamp"]})
             removed.append((debut, fin))
             continue
     others = df[~mask_user]
@@ -192,4 +192,4 @@ with st.form("annulation_form"):
 
 st.header("Historique des réservations et annulations")
 histo = pd.read_csv(HISTORIQUE_FILE)
-st.dataframe(histo.sort_values(by=["Timestamp_resa", "Timestamp_annulation"], ascending=False))
+st.dataframe(histo.sort_values(by=["Timestamp", "Timestamp"], ascending=False))
