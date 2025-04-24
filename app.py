@@ -10,24 +10,19 @@ HISTORIQUE_FILE = "historique.csv"
 NEW_RESA_COLS = ["Début", "Fin", "Salle", "Utilisateur", "Timestamp_resa"]
 NEW_HISTO_COLS = ["Action", "Début", "Fin", "Salle", "Utilisateur", "Timestamp_resa", "Timestamp_annulation"]
 
-# Initialisation des fichiers CSV avec migration si ancien format détecté
+# Initialisation des fichiers CSV
 
 def init_files():
-    # Réservations
     if os.path.exists(RESERVATION_FILE):
         df = pd.read_csv(RESERVATION_FILE)
-        # Si colonnes anciennes ou manquantes, réinitialiser
         if not all(col in df.columns for col in NEW_RESA_COLS):
-            st.warning("Ancien fichier de réservations détecté : réinitialisation du fichier.")
             pd.DataFrame(columns=NEW_RESA_COLS).to_csv(RESERVATION_FILE, index=False)
     else:
         pd.DataFrame(columns=NEW_RESA_COLS).to_csv(RESERVATION_FILE, index=False)
 
-    # Historique
     if os.path.exists(HISTORIQUE_FILE):
         dfh = pd.read_csv(HISTORIQUE_FILE)
         if not all(col in dfh.columns for col in NEW_HISTO_COLS):
-            st.warning("Ancien fichier d'historique détecté : réinitialisation du fichier.")
             pd.DataFrame(columns=NEW_HISTO_COLS).to_csv(HISTORIQUE_FILE, index=False)
     else:
         pd.DataFrame(columns=NEW_HISTO_COLS).to_csv(HISTORIQUE_FILE, index=False)
@@ -35,21 +30,22 @@ def init_files():
 
 def reserver(debut, fin, salle, utilisateur):
     df = pd.read_csv(RESERVATION_FILE)
-    # Vérification de conflit
+    df["Début"] = pd.to_datetime(df["Début"])
+    df["Fin"] = pd.to_datetime(df["Fin"])
     conflit = df[(df["Salle"] == salle) & (
-        ((pd.to_datetime(df["Début"]) <= debut) & (pd.to_datetime(df["Fin"]) > debut)) |
-        ((pd.to_datetime(df["Début"]) < fin) & (pd.to_datetime(df["Fin"]) >= fin)) |
-        ((pd.to_datetime(df["Début"]) >= debut) & (pd.to_datetime(df["Fin"]) <= fin))
+        ((df["Début"] <= debut) & (df["Fin"] > debut)) |
+        ((df["Début"] < fin) & (df["Fin"] >= fin)) |
+        ((df["Début"] >= debut) & (df["Fin"] <= fin))
     )]
     if not conflit.empty:
         st.warning(f"Un conflit de réservation existe déjà pour la salle {salle} à cette période.")
         return
-    # Enregistrement
     timestamp = datetime.now().isoformat()
     new_resa = pd.DataFrame([[debut.isoformat(), fin.isoformat(), salle, utilisateur, timestamp]], columns=NEW_RESA_COLS)
-    df = pd.concat([df, new_resa], ignore_index=True)
-    df.to_csv(RESERVATION_FILE, index=False)
-    # Historique
+    df_out = pd.concat([df, new_resa], ignore_index=True)
+    df_out["Début"] = df_out["Début"].astype(str)
+    df_out["Fin"] = df_out["Fin"].astype(str)
+    df_out.to_csv(RESERVATION_FILE, index=False)
     histo = pd.read_csv(HISTORIQUE_FILE)
     entry = ["Réservation", debut.isoformat(), fin.isoformat(), salle, utilisateur, timestamp, ""]
     histo = pd.concat([histo, pd.DataFrame([entry], columns=NEW_HISTO_COLS)], ignore_index=True)
@@ -59,24 +55,66 @@ def reserver(debut, fin, salle, utilisateur):
 
 def annuler(debut, fin, salle, utilisateur):
     df = pd.read_csv(RESERVATION_FILE)
-    mask = (df["Début"] == debut.isoformat()) & (df["Fin"] == fin.isoformat()) & (df["Salle"] == salle) & (df["Utilisateur"] == utilisateur)
-    if not mask.any():
-        st.warning(f"Réservation non trouvée pour la salle {salle}.")
-        return
-    df = df[~mask]
-    df.to_csv(RESERVATION_FILE, index=False)
-    timestamp = datetime.now().isoformat()
+    df["Début"] = pd.to_datetime(df["Début"])
+    df["Fin"] = pd.to_datetime(df["Fin"])
+    # Sélectionner les réservations de l'utilisateur et de la salle
+    mask_user = (df["Salle"] == salle) & (df["Utilisateur"] == utilisateur)
+    to_process = df[mask_user]
+    updated = []
+    removed = []
+    for _, row in to_process.iterrows():
+        r_start = row["Début"]
+        r_end = row["Fin"]
+        # aucun chevauchement
+        if fin <= r_start or debut >= r_end:
+            updated.append(row)
+            continue
+        # annulation recouvre tout
+        if debut <= r_start and fin >= r_end:
+            removed.append((r_start, r_end))
+            continue
+        # annulation en début de réservation
+        if debut <= r_start < fin < r_end:
+            new_start = fin
+            updated.append({"Début": new_start, "Fin": r_end, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
+            removed.append((r_start, fin))
+            continue
+        # annulation en fin de réservation
+        if r_start < debut < r_end <= fin:
+            new_end = debut
+            updated.append({"Début": r_start, "Fin": new_end, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
+            removed.append((debut, r_end))
+            continue
+        # annulation au milieu -> split en deux
+        if r_start < debut and fin < r_end:
+            updated.append({"Début": r_start, "Fin": debut, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
+            updated.append({"Début": fin, "Fin": r_end, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
+            removed.append((debut, fin))
+            continue
+    # Reconstruire df
+    others = df[~mask_user]
+    # préparer updated dataframe
+    if updated:
+        df_updated = pd.DataFrame(updated)
+        df_updated["Début"] = df_updated["Début"].astype(str)
+        df_updated["Fin"] = df_updated["Fin"].astype(str)
+        df_out = pd.concat([others, df_updated], ignore_index=True)
+    else:
+        df_out = others.copy()
+    df_out.to_csv(RESERVATION_FILE, index=False)
+    # Historique des annulations partielles
     histo = pd.read_csv(HISTORIQUE_FILE)
-    entry = ["Annulation", debut.isoformat(), fin.isoformat(), salle, utilisateur, "", timestamp]
-    histo = pd.concat([histo, pd.DataFrame([entry], columns=NEW_HISTO_COLS)], ignore_index=True)
+    timestamp = datetime.now().isoformat()
+    for rem in removed:
+        entry = ["Annulation partielle", rem[0].isoformat(), rem[1].isoformat(), salle, utilisateur, "", timestamp]
+        histo = pd.concat([histo, pd.DataFrame([entry], columns=NEW_HISTO_COLS)], ignore_index=True)
     histo.to_csv(HISTORIQUE_FILE, index=False)
-    st.success(f"Réservation annulée pour la salle {salle}.")
+    st.success(f"Annulation effectuée pour l'intervalle spécifié sur la salle {salle}.")
 
 # --- Application Streamlit ---
 init_files()
 st.title("Réservation des salles de microscopie")
 
-# Formulaire de réservation
 st.header("Nouvelle réservation")
 with st.form("reservation_form"):
     utilisateur_resa = st.text_input("Nom de l'utilisateur", key="resa_user")
@@ -98,7 +136,6 @@ with st.form("reservation_form"):
             if salle_fluo:
                 reserver(debut_dt, fin_dt, "Fluorescence inversé", utilisateur_resa)
 
-# Formulaire d'annulation
 st.header("Annuler une réservation")
 with st.form("annulation_form"):
     utilisateur_annul = st.text_input("Nom de l'utilisateur pour annulation", key="annul_user")
@@ -120,7 +157,6 @@ with st.form("annulation_form"):
             if salle_fluo_a:
                 annuler(debut_a, fin_a, "Fluorescence inversé", utilisateur_annul)
 
-# Affichage de l'historique
 st.header("Historique des réservations et annulations")
 histo = pd.read_csv(HISTORIQUE_FILE)
 st.dataframe(histo.sort_values(by=["Timestamp_resa", "Timestamp_annulation"], ascending=False))
