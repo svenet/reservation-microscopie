@@ -392,4 +392,4 @@ with st.form("annulation_form"):
 st.header("Historique des réservations et annulations")
 
 histo = pd.read_csv(HISTORIQUE_FILE)
-st.dataframe(histo.sor
+st.dataframe(histo.sort_values(by=["Timestamp_resa", "Timestamp_annulation"], ascending=False))
