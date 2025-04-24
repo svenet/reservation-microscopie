@@ -31,24 +31,93 @@ def init_files():
     else:
         pd.DataFrame(columns=NEW_HISTO_COLS).to_csv(HISTORIQUE_FILE, index=False)
 
+# Fonctions de gestion des réservations
+
+def reserver(debut, fin, salle, utilisateur):
+    df = pd.read_csv(RESERVATION_FILE)
+    df["Début"] = pd.to_datetime(df["Début"])
+    df["Fin"] = pd.to_datetime(df["Fin"])
+    conflit = df[(df["Salle"] == salle) & (
+        ((df["Début"] <= debut) & (df["Fin"] > debut)) |
+        ((df["Début"] < fin) & (df["Fin"] >= fin)) |
+        ((df["Début"] >= debut) & (df["Fin"] <= fin))
+    )]
+    if not conflit.empty:
+        st.warning(f"Un conflit de réservation existe déjà pour la salle {salle} à cette période.")
+        return
+    timestamp = datetime.now().isoformat()
+    new_resa = pd.DataFrame([[debut.isoformat(), fin.isoformat(), salle, utilisateur, timestamp]], columns=NEW_RESA_COLS)
+    df_out = pd.concat([df, new_resa], ignore_index=True)
+    df_out["Début"] = df_out["Début"].astype(str)
+    df_out["Fin"] = df_out["Fin"].astype(str)
+    df_out.to_csv(RESERVATION_FILE, index=False)
+    histo = pd.read_csv(HISTORIQUE_FILE)
+    entry = ["Réservation", debut.isoformat(), fin.isoformat(), salle, utilisateur, timestamp, ""]
+    histo = pd.concat([histo, pd.DataFrame([entry], columns=NEW_HISTO_COLS)], ignore_index=True)
+    histo.to_csv(HISTORIQUE_FILE, index=False)
+    st.success(f"Réservation enregistrée pour la salle {salle}.")
+
+
+def annuler(debut, fin, salle, utilisateur):
+    df = pd.read_csv(RESERVATION_FILE)
+    df["Début"] = pd.to_datetime(df["Début"])
+    df["Fin"] = pd.to_datetime(df["Fin"])
+    mask_user = (df["Salle"] == salle) & (df["Utilisateur"] == utilisateur)
+    to_process = df[mask_user]
+    updated = []
+    removed = []
+    # traiter chaque réservation de l'utilisateur
+    for _, row in to_process.iterrows():
+        r_start = row["Début"]
+        r_end = row["Fin"]
+        if fin <= r_start or debut >= r_end:
+            updated.append(row)
+            continue
+        if debut <= r_start and fin >= r_end:
+            removed.append((r_start, r_end))
+            continue
+        if debut <= r_start < fin < r_end:
+            updated.append({"Début": fin, "Fin": r_end, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
+            removed.append((r_start, fin))
+            continue
+        if r_start < debut < r_end <= fin:
+            updated.append({"Début": r_start, "Fin": debut, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
+            removed.append((debut, r_end))
+            continue
+        if r_start < debut and fin < r_end:
+            updated.append({"Début": r_start, "Fin": debut, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
+            updated.append({"Début": fin, "Fin": r_end, "Salle": salle, "Utilisateur": utilisateur, "Timestamp_resa": row["Timestamp_resa"]})
+            removed.append((debut, fin))
+            continue
+    others = df[~mask_user]
+    if updated:
+        df_updated = pd.DataFrame(updated)
+        df_updated["Début"] = df_updated["Début"].astype(str)
+        df_updated["Fin"] = df_updated["Fin"].astype(str)
+        df_out = pd.concat([others, df_updated], ignore_index=True)
+    else:
+        df_out = others.copy()
+    df_out.to_csv(RESERVATION_FILE, index=False)
+    histo = pd.read_csv(HISTORIQUE_FILE)
+    timestamp = datetime.now().isoformat()
+    for rem in removed:
+        entry = ["Annulation partielle", rem[0].isoformat(), rem[1].isoformat(), salle, utilisateur, "", timestamp]
+        histo = pd.concat([histo, pd.DataFrame([entry], columns=NEW_HISTO_COLS)], ignore_index=True)
+    histo.to_csv(HISTORIQUE_FILE, index=False)
+    st.success(f"Annulation effectuée pour l'intervalle spécifié sur la salle {salle}.")
+
 # Affichage des calendriers hebdomadaires pour une semaine donnée
 
 def display_weekly_calendar(start_week: date):
-    # calcul des jours de la semaine (lundi à dimanche)
     days = [start_week + timedelta(days=i) for i in range(7)]
     day_labels = [d.strftime('%a %d/%m') for d in days]
-
-    # charger réservations
     df = pd.read_csv(RESERVATION_FILE)
     if not df.empty:
         df['Début'] = pd.to_datetime(df['Début'])
         df['Fin'] = pd.to_datetime(df['Fin'])
-
     for salle in ["Raman", "Fluorescence inversé"]:
-        # initialiser matrice disponibilité
         cal = pd.DataFrame(index=HOUR_LABELS, columns=day_labels)
         cal.fillna("Libre", inplace=True)
-        # marquer réservations
         df_s = df[df['Salle'] == salle]
         for _, row in df_s.iterrows():
             start = row['Début']
@@ -65,13 +134,14 @@ def display_weekly_calendar(start_week: date):
 # --- Application Streamlit ---
 init_files()
 st.title("Réservation des salles de microscopie")
+# Sélecteur de semaine
 
-# Sélecteur de semaine (date de début de semaine)
 today = date.today()
 default_monday = today - timedelta(days=today.weekday())
 week_start = st.date_input("Semaine du (lundi)", value=default_monday, help="Choisissez le lundi de la semaine à afficher")
 
-# afficher calendriers pour la semaine sélectionnée
+# Calendriers
+"display_weekly_calendar(week_start)"
 display_weekly_calendar(week_start)
 
 st.header("Nouvelle réservation")
@@ -121,5 +191,6 @@ with st.form("annulation_form"):
                 annuler(debut_a, fin_a, "Fluorescence inversé", utilisateur_annul)
 
 st.header("Historique des réservations et annulations")
+
 histo = pd.read_csv(HISTORIQUE_FILE)
 st.dataframe(histo.sort_values(by=["Timestamp_resa", "Timestamp_annulation"], ascending=False))
