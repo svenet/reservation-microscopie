@@ -179,8 +179,8 @@ elif choice == "Récapitulatif":
         'cancelled_at': 'Annulé le'
     })
 
-    AgGrid(
+    st.dataframe(
         df_display.sort_values(by='Début', ascending=False),
-        height=500,
-        fit_columns_on_grid_load=True
+        use_container_width=True,
+        height=500
     )
