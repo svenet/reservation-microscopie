@@ -31,12 +31,10 @@ def init_files():
     else:
         pd.DataFrame(columns=NEW_HISTO_COLS).to_csv(HISTORIQUE_FILE, index=False)
 
-# Affichage des calendriers hebdomadaires
+# Affichage des calendriers hebdomadaires pour une semaine donnée
 
-def display_weekly_calendar():
-    # calcul de la semaine en cours (lundi à dimanche)
-    today = date.today()
-    start_week = today - timedelta(days=today.weekday())
+def display_weekly_calendar(start_week: date):
+    # calcul des jours de la semaine (lundi à dimanche)
     days = [start_week + timedelta(days=i) for i in range(7)]
     day_labels = [d.strftime('%a %d/%m') for d in days]
 
@@ -45,7 +43,7 @@ def display_weekly_calendar():
     if not df.empty:
         df['Début'] = pd.to_datetime(df['Début'])
         df['Fin'] = pd.to_datetime(df['Fin'])
-    
+
     for salle in ["Raman", "Fluorescence inversé"]:
         # initialiser matrice disponibilité
         cal = pd.DataFrame(index=HOUR_LABELS, columns=day_labels)
@@ -56,7 +54,6 @@ def display_weekly_calendar():
             start = row['Début']
             end = row['Fin']
             for d, label in zip(days, day_labels):
-                # pour chaque heure
                 for h, h_lbl in zip(HOURS, HOUR_LABELS):
                     slot_start = datetime.combine(d, time(h, 0))
                     slot_end = slot_start + timedelta(hours=1)
@@ -69,8 +66,13 @@ def display_weekly_calendar():
 init_files()
 st.title("Réservation des salles de microscopie")
 
-# afficher calendriers en tout début
-display_weekly_calendar()
+# Sélecteur de semaine (date de début de semaine)
+today = date.today()
+default_monday = today - timedelta(days=today.weekday())
+week_start = st.date_input("Semaine du (lundi)", value=default_monday, help="Choisissez le lundi de la semaine à afficher")
+
+# afficher calendriers pour la semaine sélectionnée
+display_weekly_calendar(week_start)
 
 st.header("Nouvelle réservation")
 with st.form("reservation_form"):
