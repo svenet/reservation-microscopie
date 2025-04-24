@@ -34,8 +34,9 @@ def init_files():
 # Fonctions de gestion des réservations
 def reserver(debut, fin, salle, utilisateur):
     df = pd.read_csv(RESERVATION_FILE)
-    df["Début"] = pd.to_datetime(df["Début"])
-    df["Fin"] = pd.to_datetime(df["Fin"])
+    df["Début"] = pd.to_datetime(df["Début"], errors='coerce')
+    df["Fin"] = pd.to_datetime(df["Fin"], errors='coerce')
+    df = df.dropna(subset=["Début", "Fin"]).reset_index(drop=True)
     conflit = df[(df["Salle"] == salle) & (
         ((df["Début"] <= debut) & (df["Fin"] > debut)) |
         ((df["Début"] < fin) & (df["Fin"] >= fin)) |
@@ -59,8 +60,9 @@ def reserver(debut, fin, salle, utilisateur):
 
 def annuler(debut, fin, salle, utilisateur):
     df = pd.read_csv(RESERVATION_FILE)
-    df["Début"] = pd.to_datetime(df["Début"])
-    df["Fin"] = pd.to_datetime(df["Fin"])
+    df["Début"] = pd.to_datetime(df["Début"], errors='coerce')
+    df["Fin"] = pd.to_datetime(df["Fin"], errors='coerce')
+    df = df.dropna(subset=["Début", "Fin"]).reset_index(drop=True)
     mask_user = (df["Salle"] == salle) & (df["Utilisateur"] == utilisateur)
     to_process = df[mask_user]
     updated = []
@@ -111,8 +113,9 @@ def display_weekly_calendar(start_week: date):
     day_labels = [d.strftime('%a %d/%m') for d in days]
     df = pd.read_csv(RESERVATION_FILE)
     if not df.empty:
-        df['Début'] = pd.to_datetime(df['Début'])
-        df['Fin'] = pd.to_datetime(df['Fin'])
+        df['Début'] = pd.to_datetime(df['Début'], errors='coerce')
+        df['Fin'] = pd.to_datetime(df['Fin'], errors='coerce')
+        df = df.dropna(subset=['Début', 'Fin']).reset_index(drop=True)
     for salle in ["Raman", "Fluorescence inversé"]:
         cal = pd.DataFrame(index=HOUR_LABELS, columns=day_labels)
         cal.fillna("Libre", inplace=True)
@@ -133,8 +136,9 @@ def display_weekly_calendar(start_week: date):
 # --- Nouvelle fonctionnalité : export Excel des durées réservées ---
 
 def generate_summary_excel(df_resa, start_date, end_date):
-    df_resa['Début'] = pd.to_datetime(df_resa['Début'])
-    df_resa['Fin'] = pd.to_datetime(df_resa['Fin'])
+    df_resa['Début'] = pd.to_datetime(df_resa['Début'], errors='coerce')
+    df_resa['Fin'] = pd.to_datetime(df_resa['Fin'], errors='coerce')
+    df_resa = df_resa.dropna(subset=['Début', 'Fin']).reset_index(drop=True)
     mask = (df_resa['Début'].dt.date >= start_date) & (df_resa['Fin'].dt.date <= end_date)
     df_period = df_resa.loc[mask].copy()
     df_period['Durée_h'] = (df_period['Fin'] - df_period['Début']).dt.total_seconds() / 3600
