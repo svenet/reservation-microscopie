@@ -147,14 +147,19 @@ def display_weekly_calendar(start_week: date):
         st.dataframe(styled)
 
 # --- Streamlit UI ---
-init_files(); st.title("Réservation des salles de microscopie")
+init_files()
+st.title("Réservation des salles de microscopie")
+
 if st.button("Envoyer l'historique par email"):
     send_history_email()
+
 # Sélecteur de semaine
-week_start = st.date_input("Semaine du (lundi)", value=date.today()-timedelta(days=date.today().weekday()))
+week_start = st.date_input("Semaine du (lundi)", value=date.today() - timedelta(days=date.today().weekday()))
+
 # Afficher calendriers
 display_weekly_calendar(week_start)
-# Formulaires réservation et annulation (inchangés)
+
+# Formulaire réservation
 st.header("Nouvelle réservation")
 with st.form("reservation_form"):
     user = st.text_input("Nom de l'utilisateur", key="resa_user")
@@ -167,10 +172,15 @@ with st.form("reservation_form"):
     if st.form_submit_button("Réserver") and user:
         dt1 = datetime.combine(d1, time(int(h1.replace('h00','')),0))
         dt2 = datetime.combine(d2, time(int(h2.replace('h00','')),0))
-        if dt2<=dt1: st.error("Fin doit être après début.")
+        if dt2 <= dt1:
+            st.error("Fin doit être après début.")
         else:
-            if cb1: reserver(dt1, dt2, "Raman", user)
-            if cb2: reserver(dt1, dt2, "Fluorescence inversé", user)
+            if cb1:
+                reserver(dt1, dt2, "Raman", user)
+            if cb2:
+                reserver(dt1, dt2, "Fluorescence inversé", user)
+
+# Formulaire annulation
 st.header("Annuler une réservation")
 with st.form("annulation_form"):
     user2 = st.text_input("Nom de l'utilisateur pour annulation", key="annul_user")
@@ -183,7 +193,10 @@ with st.form("annulation_form"):
     if st.form_submit_button("Annuler") and user2:
         dtA1 = datetime.combine(da1, time(int(ha1.replace('h00','')),0))
         dtA2 = datetime.combine(da2, time(int(ha2.replace('h00','')),0))
-        if dtA2<=dtA1: st.error("Fin doit être après début.")
+        if dtA2 <= dtA1:
+            st.error("Fin doit être après début.")
         else:
-            if cb3: annuler(dtA1, dtA2, "Raman", user2)
-            if cb4: annuler(dtA1, dtA2, "Fluorescence inversé", user2)
+            if cb3:
+                annuler(dtA1, dtA2, "Raman", user2)
+            if cb4:
+                annuler(dtA1, dtA2, "Fluorescence inversé", user2)
