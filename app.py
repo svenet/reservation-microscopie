@@ -10,8 +10,8 @@ HISTORIQUE_FILE = "historique.csv"
 NEW_RESA_COLS = ["Début", "Fin", "Salle", "Utilisateur", "Timestamp_resa"]
 NEW_HISTO_COLS = ["Action", "Début", "Fin", "Salle", "Utilisateur", "Timestamp_resa", "Timestamp_annulation"]
 
-# Heures pleines autorisées
-HOURS = list(range(8, 20))  # 8h à 19h
+# Heures pleines autorisées (affichage en "8h00" etc.)
+HOUR_LABELS = [f"{h}h00" for h in range(8, 20)]  # 8h00 à 19h00
 
 # Initialisation des fichiers CSV
 
@@ -113,15 +113,18 @@ st.header("Nouvelle réservation")
 with st.form("reservation_form"):
     utilisateur_resa = st.text_input("Nom de l'utilisateur", key="resa_user")
     date_debut = st.date_input("Date de début", key="resa_date_debut")
-    heure_debut_h = st.selectbox("Heure de début (heure pleine)", HOURS, key="resa_h_debut")
+    heure_debut_lbl = st.selectbox("Heure de début", HOUR_LABELS, key="resa_h_debut")
     date_fin = st.date_input("Date de fin", key="resa_date_fin")
-    heure_fin_h = st.selectbox("Heure de fin (heure pleine)", HOURS, key="resa_h_fin")
+    heure_fin_lbl = st.selectbox("Heure de fin", HOUR_LABELS, key="resa_h_fin")
     salle_raman = st.checkbox("Salle Raman", key="resa_raman")
     salle_fluo = st.checkbox("Salle Fluorescence inversé", key="resa_fluo")
     submit_resa = st.form_submit_button("Réserver")
     if submit_resa and utilisateur_resa:
-        debut_dt = datetime.combine(date_debut, time(heure_debut_h, 0))
-        fin_dt = datetime.combine(date_fin, time(heure_fin_h, 0))
+        # conversion des labels "8h00" -> heure int
+        debut_hour = int(heure_debut_lbl.replace('h00',''))
+        fin_hour = int(heure_fin_lbl.replace('h00',''))
+        debut_dt = datetime.combine(date_debut, time(debut_hour, 0))
+        fin_dt = datetime.combine(date_fin, time(fin_hour, 0))
         if fin_dt <= debut_dt:
             st.error("La date/heure de fin doit être après la date/heure de début.")
         else:
@@ -134,15 +137,17 @@ st.header("Annuler une réservation")
 with st.form("annulation_form"):
     utilisateur_annul = st.text_input("Nom de l'utilisateur pour annulation", key="annul_user")
     date_debut_a = st.date_input("Date de début à annuler", key="annul_date_debut")
-    heure_debut_ha = st.selectbox("Heure de début à annuler (heure pleine)", HOURS, key="annul_h_debut")
+    heure_debut_lbl_a = st.selectbox("Heure de début à annuler", HOUR_LABELS, key="annul_h_debut")
     date_fin_a = st.date_input("Date de fin à annuler", key="annul_date_fin")
-    heure_fin_ha = st.selectbox("Heure de fin à annuler (heure pleine)", HOURS, key="annul_h_fin")
+    heure_fin_lbl_a = st.selectbox("Heure de fin à annuler", HOUR_LABELS, key="annul_h_fin")
     salle_raman_a = st.checkbox("Salle Raman", key="annul_raman")
     salle_fluo_a = st.checkbox("Salle Fluorescence inversé", key="annul_fluo")
     submit_annul = st.form_submit_button("Annuler")
     if submit_annul and utilisateur_annul:
-        debut_a = datetime.combine(date_debut_a, time(heure_debut_ha, 0))
-        fin_a = datetime.combine(date_fin_a, time(heure_fin_ha, 0))
+        debut_hour_a = int(heure_debut_lbl_a.replace('h00',''))
+        fin_hour_a = int(heure_fin_lbl_a.replace('h00',''))
+        debut_a = datetime.combine(date_debut_a, time(debut_hour_a, 0))
+        fin_a = datetime.combine(date_fin_a, time(fin_hour_a, 0))
         if fin_a <= debut_a:
             st.error("La date/heure de fin doit être après la date/heure de début.")
         else:
